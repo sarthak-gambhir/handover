@@ -76,6 +76,21 @@ describe('Store — byte reservation', () => {
     expect(session.total_bytes).toBe(0);
     expect(store.totalBytesGlobal).toBe(0);
   });
+
+  it('enforces the global cap across multiple sessions', () => {
+    const store = new Store();
+    const a = store.createSession().session;
+    const b = store.createSession().session;
+    // Fill one session to its per-session cap, then top up a second session to
+    // the global cap; any further reservation must be rejected on the global
+    // limit even though the second session has room.
+    expect(store.reserveBytes(a, config.maxSessionBytes)).toBe(true);
+    const remaining = config.maxTotalBytes - config.maxSessionBytes;
+    expect(remaining).toBeGreaterThan(0);
+    expect(store.reserveBytes(b, remaining)).toBe(true);
+    expect(store.totalBytesGlobal).toBe(config.maxTotalBytes);
+    expect(store.reserveBytes(b, 1)).toBe(false);
+  });
 });
 
 describe('Store — sweeper', () => {

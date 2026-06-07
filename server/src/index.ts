@@ -93,6 +93,10 @@ const httpServer = http.createServer(app);
 const io = new SocketIOServer(httpServer, {
   path: '/api/ws',
   cors: { origin: config.clientOrigin, credentials: true },
+  // Cap inbound message size. Signaling payloads (SDP/ICE) are small; this
+  // bounds memory/DoS exposure from a malicious client. File bytes never go
+  // over the socket — they flow peer-to-peer over WebRTC.
+  maxHttpBufferSize: 256 * 1024,
 });
 setIo(io);
 registerWs(io);

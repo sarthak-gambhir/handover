@@ -84,6 +84,11 @@ export function Session() {
 
   return (
     <div className="session">
+      {s.reconnecting && (
+        <div className="session_reconnecting" role="status" aria-live="polite">
+          Connection lost — reconnecting…
+        </div>
+      )}
       <header className="session_header">
         <div className="session_header_info">
           <span className="session_slug">{cleanSlug}</span>

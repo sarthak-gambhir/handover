@@ -31,6 +31,7 @@ export type StoreEvents = {
   'knock:expired': { slug: string; knock_id: string; socket_id: string | null };
   'session:ended': { slug: string; reason: string };
   'transfer:expired': { slug: string; transfer: TransferState };
+  'owner_offer:expired': { slug: string; to_user_id: string; from_user_id: string };
 };
 
 /**
@@ -76,6 +77,7 @@ export class Store extends EventEmitter {
       last_activity: now,
       owner_disconnected_at: null,
       knocking_paused: false,
+      pending_owner_offer: null,
     };
 
     this.sessions.set(slug, session);
@@ -185,6 +187,14 @@ export class Store extends EventEmitter {
     for (const [id, entry] of session.bucket) {
       if (entry.uploader_id === user_id) this.removeBucketEntry(session, id);
     }
+    // Drop any ownership offer that involves the departing member.
+    if (
+      session.pending_owner_offer &&
+      (session.pending_owner_offer.to_user_id === user_id ||
+        session.pending_owner_offer.from_user_id === user_id)
+    ) {
+      session.pending_owner_offer = null;
+    }
     this.touch(session);
     return member;
   }
@@ -203,6 +213,7 @@ export class Store extends EventEmitter {
     const nextTok = this.tokens.get(next.session_token);
     if (nextTok && nextTok.status === 'member') nextTok.is_owner = true;
     session.owner_user_id = to_user_id;
+    session.pending_owner_offer = null;
     this.touch(session);
     return true;
   }
@@ -346,6 +357,17 @@ export class Store extends EventEmitter {
     return n;
   }
 
+  /** Count of non-terminal transfers across all sessions (for health metrics). */
+  inFlightTransferCount(): number {
+    let n = 0;
+    for (const s of this.sessions.values()) {
+      for (const t of s.transfers.values()) {
+        if (!TERMINAL_STATES.has(t.state)) n++;
+      }
+    }
+    return n;
+  }
+
   // ---- sweeper -----------------------------------------------------------
 
   startSweeper(): void {
@@ -377,6 +399,15 @@ export class Store extends EventEmitter {
       ) {
         this.endSession(session.slug, 'owner_left');
         continue;
+      }
+      // Ownership-offer TTL.
+      if (
+        session.pending_owner_offer !== null &&
+        now - session.pending_owner_offer.created_at > config.ownerOfferTtlMs
+      ) {
+        const { to_user_id, from_user_id } = session.pending_owner_offer;
+        session.pending_owner_offer = null;
+        this.emit('owner_offer:expired', { slug: session.slug, to_user_id, from_user_id });
       }
       // Knock TTL.
       for (const knocker of [...session.knockers.values()]) {

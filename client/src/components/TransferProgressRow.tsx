@@ -42,7 +42,14 @@ export function TransferProgressRow({
             {transfer.role === 'sender' ? 'to' : 'from'} {transfer.peer_name}
           </span>
         </div>
-        <div className="transfer_progress_row_track">
+        <div
+          className="transfer_progress_row_track"
+          role="progressbar"
+          aria-label={`Transfer ${label}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(transfer.fraction * 100)}
+        >
           <div
             className="transfer_progress_row_fill"
             style={{ width: `${Math.round(transfer.fraction * 100)}%` }}

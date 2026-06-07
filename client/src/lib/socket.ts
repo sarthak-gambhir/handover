@@ -36,9 +36,10 @@ export interface ServerToClient {
   'owner:changed': (p: { new_owner_user_id: string }) => void;
   owner_offered: (p: { from_user_id: string }) => void;
   owner_declined: (p: { by_user_id: string }) => void;
+  'owner_offer:expired': (p: { to_user_id: string }) => void;
   'file:added': (p: { entry: PublicBucketEntry }) => void;
   'file:removed': (p: { id: string }) => void;
-  'transfer:created': (p: { transfer_id: string; to_user_id: string }) => void;
+  'transfer:created': (p: { transfer_id: string; to_user_id: string; client_ref?: string }) => void;
   'transfer:request': (p: { transfer_id: string; from_user_id: string; files: TransferFileMeta[] }) => void;
   'transfer:response': (p: { transfer_id: string; to_user_id: string; accepted: boolean }) => void;
   'transfer:cancelled': (p: { transfer_id: string; by_user_id: string; reason: string }) => void;
@@ -60,7 +61,7 @@ export interface ClientToServer {
   transfer_ownership: (p: { to_user_id: string }) => void;
   owner_accept: () => void;
   owner_decline: () => void;
-  'transfer:request': (p: { to_user_id: string; files: TransferFileMeta[] }) => void;
+  'transfer:request': (p: { to_user_id: string; files: TransferFileMeta[]; client_ref?: string }) => void;
   'transfer:response': (p: { transfer_id: string; accepted: boolean }) => void;
   'transfer:cancel': (p: { transfer_id: string; reason?: string }) => void;
   'transfer:complete': (p: { transfer_id: string }) => void;

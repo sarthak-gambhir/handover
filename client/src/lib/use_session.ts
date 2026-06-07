@@ -8,14 +8,8 @@ import type { Knock } from '../components/KnockQueueItem';
 import type { IncomingRequest } from '../components/IncomingTransferModal';
 import { SenderConnection, ReceiverConnection, type PeerCallbacks } from './webrtc';
 import { type TransferVM, type TransferStatus, isTerminal } from './transfer_types';
+import { useBucketUploads } from './use_bucket_uploads';
 import { randomId } from './id';
-
-export interface UploadVM {
-  tempId: string;
-  entry: PublicBucketEntry;
-  fraction: number;
-  abort: () => void;
-}
 
 type Conn = SenderConnection | ReceiverConnection;
 
@@ -28,13 +22,13 @@ export function useSession(slug: string) {
   const { toast } = useToast();
   const [status, setStatus] = useState<'connecting' | 'live' | 'fatal'>('connecting');
   const [fatalMessage, setFatalMessage] = useState('');
+  const [reconnecting, setReconnecting] = useState(false);
   const [members, setMembers] = useState<PublicMember[]>([]);
   const [bucket, setBucket] = useState<PublicBucketEntry[]>([]);
   const [knockers, setKnockers] = useState<Knock[]>([]);
   const [knockingPaused, setKnockingPaused] = useState(false);
   const [yourUserId, setYourUserId] = useState('');
   const [ownerUserId, setOwnerUserId] = useState('');
-  const [uploads, setUploads] = useState<UploadVM[]>([]);
   const [transfers, setTransfers] = useState<TransferVM[]>([]);
   const [incoming, setIncoming] = useState<IncomingRequest | null>(null);
   const [ownerOffer, setOwnerOffer] = useState<{ from_user_id: string } | null>(null);
@@ -45,6 +39,8 @@ export function useSession(slug: string) {
   const filesRef = useRef<Map<string, File[]>>(new Map());
   const outgoingQueue = useRef<Array<{ key: string; to_user_id: string }>>([]);
   const rateRef = useRef<Map<string, RateSample>>(new Map());
+
+  const { uploads, uploadFiles, deleteFile } = useBucketUploads(slug, yourUserId);
 
   const isOwner = yourUserId !== '' && yourUserId === ownerUserId;
   const nameOf = useCallback(
@@ -119,7 +115,16 @@ export function useSession(slug: string) {
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      // Fires on first connect and on every reconnect; re-identify resyncs
+      // state via the server's state:snapshot.
+      setReconnecting(false);
       socket.emit('identify', { slug, tab_id: sessionStore.tabId });
+    });
+
+    socket.on('disconnect', (reason) => {
+      // Ignore client-initiated teardown (unmount, fatal handlers); only show
+      // the reconnecting banner for unexpected drops that socket.io will retry.
+      if (reason !== 'io client disconnect') setReconnecting(true);
     });
 
     socket.on('state:snapshot', (p) => {
@@ -130,6 +135,11 @@ export function useSession(slug: string) {
       setMembers(p.members);
       setBucket(p.bucket);
       sessionStore.set({ slug, user_id: p.your_user_id, is_owner: p.your_user_id === p.owner_user_id });
+      // Knocks set a short-lived (pending) cookie that the WS admission flow
+      // never upgrades. Hit the authenticated snapshot endpoint so requireMember
+      // re-issues the cookie with the member Max-Age (sliding window). Also runs
+      // on every reconnect to keep the HTTP cookie fresh. Fire-and-forget.
+      api.snapshot(slug).catch(() => {});
     });
 
     socket.on('members:list', (p) => setMembers(p.members));
@@ -174,10 +184,21 @@ export function useSession(slug: string) {
     });
     socket.on('owner_offered', (p) => setOwnerOffer({ from_user_id: p.from_user_id }));
     socket.on('owner_declined', () => toast('The member declined ownership.', 'warn'));
+    socket.on('owner_offer:expired', () => {
+      setOwnerOffer((cur) => {
+        if (cur) toast('The ownership offer expired.', 'warn');
+        return null;
+      });
+    });
 
     // ---- P2P signaling ----
     socket.on('transfer:created', (p) => {
-      const q = outgoingQueue.current.findIndex((o) => o.to_user_id === p.to_user_id);
+      // Prefer the explicit client_ref echoed by the server; fall back to the
+      // oldest pending send for this recipient for older servers.
+      const q =
+        p.client_ref !== undefined
+          ? outgoingQueue.current.findIndex((o) => o.key === p.client_ref)
+          : outgoingQueue.current.findIndex((o) => o.to_user_id === p.to_user_id);
       if (q === -1) return;
       const { key } = outgoingQueue.current.splice(q, 1)[0];
       const files = filesRef.current.get(key);
@@ -305,7 +326,7 @@ export function useSession(slug: string) {
           status: 'requesting',
         },
       ]);
-      socket.emit('transfer:request', { to_user_id: recipient.user_id, files: meta });
+      socket.emit('transfer:request', { to_user_id: recipient.user_id, files: meta, client_ref: key });
     },
     [],
   );
@@ -334,6 +355,9 @@ export function useSession(slug: string) {
         connRef.current.set(req.transfer_id, conn);
         socket.emit('transfer:response', { transfer_id: req.transfer_id, accepted: true });
       } catch {
+        // Tell the sender we can't receive instead of leaving it hanging in
+        // "connecting" until the server-side accepted-state timeout fires.
+        socket.emit('transfer:response', { transfer_id: req.transfer_id, accepted: false });
         setTerminalById(req.transfer_id, 'failed', 'Could not prepare to receive.');
       }
     },
@@ -357,52 +381,6 @@ export function useSession(slug: string) {
   const dismissTransfer = useCallback((t: TransferVM) => {
     setTransfers((prev) => prev.filter((x) => x.key !== t.key));
   }, []);
-
-  // ---- bucket uploads ----
-  const uploadFiles = useCallback(
-    (files: File[]) => {
-      for (const file of files) {
-        const tempId = randomId();
-        // imported lazily to avoid a cycle at module top
-        import('./uploadWithProgress').then(({ uploadWithProgress }) => {
-          const handle = uploadWithProgress(slug, file);
-          const placeholder: PublicBucketEntry = {
-            id: tempId,
-            name: file.name,
-            size: file.size,
-            content_type: file.type || 'application/octet-stream',
-            uploader_id: yourUserId,
-            created_at: Date.now(),
-          };
-          setUploads((prev) => [...prev, { tempId, entry: placeholder, fraction: 0, abort: handle.abort }]);
-          handle.onProgress((f) =>
-            setUploads((prev) => prev.map((u) => (u.tempId === tempId ? { ...u, fraction: f } : u))),
-          );
-          handle.promise
-            .then(() => setUploads((prev) => prev.filter((u) => u.tempId !== tempId)))
-            .catch((err: { code?: string }) => {
-              setUploads((prev) => prev.filter((u) => u.tempId !== tempId));
-              if (err?.code === 'insufficient_storage') toast('Server is at capacity — try again in a minute.', 'warn');
-              else if (err?.code === 'file_too_large') toast('That file is over the 100 MB limit.', 'warn');
-              else if (err?.code === 'aborted') {/* silent */}
-              else toast('Upload failed.', 'danger');
-            });
-        });
-      }
-    },
-    [slug, yourUserId, toast],
-  );
-
-  const deleteFile = useCallback(
-    async (id: string) => {
-      try {
-        await api.deleteFile(slug, id);
-      } catch {
-        toast('Could not delete the file.', 'danger');
-      }
-    },
-    [slug, toast],
-  );
 
   // ---- owner actions ----
   const admit = useCallback((knock_id: string) => {
@@ -458,6 +436,7 @@ export function useSession(slug: string) {
   return {
     status,
     fatalMessage,
+    reconnecting,
     members,
     bucket,
     knockers,

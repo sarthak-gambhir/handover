@@ -2,6 +2,8 @@ const CHUNK_SIZE = 16 * 1024; // 16 KB
 const HIGH_WATER = 16 * 1024 * 1024; // pause sending above 16 MB buffered
 const LOW_WATER = 1 * 1024 * 1024; // resume below 1 MB
 const IN_MEMORY_CAP = 1024 * 1024 * 1024; // 1 GB hard cap for the fallback path
+const READY_TIMEOUT_MS = 30 * 1000; // sender waits this long for the receiver's ready ack
+const DRAIN_TIMEOUT_MS = 30 * 1000; // fail if the send buffer never drains (dead/stuck peer)
 
 export const FSAA_WARN_FLOOR = 256 * 1024 * 1024; // 256 MB
 export const LARGE_FILE_WARN = 2 * 1024 * 1024 * 1024; // 2 GB
@@ -90,9 +92,14 @@ function attachIceMonitoring(
 
 function waitForDrain(dc: RTCDataChannel): Promise<void> {
   if (dc.bufferedAmount < HIGH_WATER) return Promise.resolve();
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     dc.bufferedAmountLowThreshold = LOW_WATER;
+    const timer = setTimeout(() => {
+      dc.removeEventListener('bufferedamountlow', onLow);
+      reject(new Error('drain_timeout'));
+    }, DRAIN_TIMEOUT_MS);
     const onLow = () => {
+      clearTimeout(timer);
       dc.removeEventListener('bufferedamountlow', onLow);
       resolve();
     };
@@ -113,6 +120,9 @@ export class SenderConnection {
   private cancelled = false;
   private completed = false;
   private clearIce: () => void;
+  private ready = false;
+  private readyResolve: (() => void) | null = null;
+  private readyTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(transferId: string, files: File[], iceServers: RTCIceServer[], cb: PeerCallbacks) {
     this.transferId = transferId;
@@ -128,7 +138,43 @@ export class SenderConnection {
       if (e.candidate) cb.sendIce(e.candidate.toJSON());
     };
     this.dc.onopen = () => void this.pump();
+    this.dc.onmessage = (ev) => this.onControl(ev.data);
     this.dc.onerror = () => this.fail('datachannel_error', 'Transfer interrupted');
+  }
+
+  /** Receiver -> sender control channel. Currently only the `ready` ack. */
+  private onControl(data: unknown): void {
+    if (typeof data !== 'string') return;
+    let msg: { type?: string };
+    try {
+      msg = JSON.parse(data) as { type?: string };
+    } catch {
+      return;
+    }
+    if (msg.type === 'ready') this.markReady();
+  }
+
+  private markReady(): void {
+    if (this.readyTimer) {
+      clearTimeout(this.readyTimer);
+      this.readyTimer = null;
+    }
+    this.ready = true;
+    this.readyResolve?.();
+    this.readyResolve = null;
+  }
+
+  /** Resolve once the receiver has set up its sinks; reject on timeout. */
+  private waitForReady(): Promise<void> {
+    if (this.ready) return Promise.resolve();
+    return new Promise<void>((resolve, reject) => {
+      this.readyResolve = resolve;
+      this.readyTimer = setTimeout(() => {
+        this.readyResolve = null;
+        this.readyTimer = null;
+        reject(new Error('receiver_timeout'));
+      }, READY_TIMEOUT_MS);
+    });
   }
 
   async start(): Promise<void> {
@@ -161,6 +207,17 @@ export class SenderConnection {
     };
     this.dc.send(JSON.stringify(manifest));
 
+    // Wait for the receiver to confirm its sinks are ready before streaming
+    // bytes. Without this the receiver can drop early chunks while it is still
+    // awaiting save-file pickers / allocating buffers.
+    try {
+      await this.waitForReady();
+    } catch {
+      this.fail('receiver_timeout', 'The other person did not start receiving in time.');
+      return;
+    }
+    if (this.cancelled) return;
+
     for (let index = 0; index < this.files.length; index++) {
       const file = this.files[index];
       let offset = 0;
@@ -181,7 +238,12 @@ export class SenderConnection {
           transferred: this.sent,
           total: this.total,
         });
-        await waitForDrain(this.dc);
+        try {
+          await waitForDrain(this.dc);
+        } catch {
+          this.fail('stalled', 'Transfer stalled — the connection appears to be stuck.');
+          return;
+        }
       }
     }
     if (this.cancelled) return;
@@ -217,6 +279,11 @@ export class SenderConnection {
 
   close(): void {
     this.clearIce();
+    if (this.readyTimer) {
+      clearTimeout(this.readyTimer);
+      this.readyTimer = null;
+    }
+    this.readyResolve = null;
     try {
       this.dc.close();
     } catch {
@@ -251,6 +318,11 @@ export class ReceiverConnection {
   private completed = false;
   private clearIce: () => void;
   private manifest: Manifest | null = null;
+  private dc: RTCDataChannel | null = null;
+  // Serialize message handling: frames arrive on a concurrent async handler, so
+  // without a queue the manifest setup (which awaits save pickers) can race
+  // chunk handling, dropping early chunks or interleaving writes.
+  private queue: Promise<void> = Promise.resolve();
 
   constructor(iceServers: RTCIceServer[], cb: PeerCallbacks) {
     this.cb = cb;
@@ -262,13 +334,21 @@ export class ReceiverConnection {
     };
     this.pc.ondatachannel = (e) => {
       const dc = e.channel;
+      this.dc = dc;
       dc.binaryType = 'arraybuffer';
-      dc.onmessage = (ev) => void this.onMessage(ev.data);
+      dc.onmessage = (ev) => this.enqueue(ev.data);
       dc.onerror = () => this.fail('datachannel_error', 'Transfer interrupted');
       dc.onclose = () => {
         if (!this.allDone()) this.fail('connection_interrupted', 'Transfer interrupted');
       };
     };
+  }
+
+  /** Append to the serial processing chain so messages are handled in order. */
+  private enqueue(data: string | ArrayBuffer): void {
+    this.queue = this.queue.then(() => this.onMessage(data)).catch(() => {
+      this.fail('protocol_error', 'Transfer failed: malformed data.');
+    });
   }
 
   async acceptOffer(sdp: RTCSessionDescriptionInit): Promise<void> {
@@ -289,7 +369,13 @@ export class ReceiverConnection {
   private async onMessage(data: string | ArrayBuffer): Promise<void> {
     if (this.cancelled) return;
     if (typeof data === 'string') {
-      const msg = JSON.parse(data);
+      let msg: { type?: string } & Partial<Manifest>;
+      try {
+        msg = JSON.parse(data) as { type?: string } & Partial<Manifest>;
+      } catch {
+        this.fail('protocol_error', 'Transfer failed: malformed control message.');
+        return;
+      }
       if (msg.type === 'done') {
         await this.finish();
         return;
@@ -323,6 +409,13 @@ export class ReceiverConnection {
         sink.chunks = [];
       }
       this.sinks[meta.index] = sink;
+    }
+
+    // Sinks are ready; tell the sender it can start streaming bytes.
+    try {
+      this.dc?.send(JSON.stringify({ type: 'ready' }));
+    } catch {
+      this.fail('connection_interrupted', 'Transfer interrupted');
     }
   }
 

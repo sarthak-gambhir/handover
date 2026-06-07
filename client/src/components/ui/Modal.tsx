@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cx } from '../../lib/cx';
 import { useExitAnimation } from '../../lib/use_exit_animation';
@@ -17,6 +17,9 @@ export function Modal({ open, onClose, title, locked = false, children, footer }
   const { mounted, exiting, ref } = useExitAnimation(open, 200);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const lastFocused = useRef<HTMLElement | null>(null);
+  const baseId = useId();
+  const titleId = `${baseId}_title`;
+  const bodyId = `${baseId}_body`;
 
   useEffect(() => {
     if (!open) return;
@@ -63,10 +66,12 @@ export function Modal({ open, onClose, title, locked = false, children, footer }
         className={cx('modal_card', locked && 'modal_card_locked', exiting && 'modal_card_exiting')}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        aria-describedby={bodyId}
         ref={cardRef}
       >
-        {title && <h2 className="modal_title">{title}</h2>}
-        <div className="modal_body">{children}</div>
+        {title && <h2 className="modal_title" id={titleId}>{title}</h2>}
+        <div className="modal_body" id={bodyId}>{children}</div>
         {footer && <div className="modal_footer">{footer}</div>}
       </div>
     </div>,

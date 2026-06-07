@@ -41,7 +41,14 @@ export function FileRow({
           {!uploading && <span className="file_row_time">{relativeTime(entry.created_at)}</span>}
         </div>
         {uploading && (
-          <div className="file_row_progress">
+          <div
+            className="file_row_progress"
+            role="progressbar"
+            aria-label={`Uploading ${entry.name}`}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round((progress ?? 0) * 100)}
+          >
             <div className="file_row_progress_bar" style={{ width: `${(progress ?? 0) * 100}%` }} />
           </div>
         )}

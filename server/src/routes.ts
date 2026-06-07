@@ -204,9 +204,22 @@ router.post(
       return;
     }
 
-    // Adjust reservation from Content-Length estimate to the real file size.
-    const diff = r.bytes - file.size;
-    if (diff > 0) store.releaseBytes(session, diff);
+    // Reconcile the Content-Length estimate against the real file size. A
+    // dishonest (under-reported) Content-Length must not let a file slip past
+    // the per-session/global caps, so any shortfall is reserved atomically and
+    // the upload is rejected if that would exceed a cap.
+    if (file.size > r.bytes) {
+      const shortfall = file.size - r.bytes;
+      if (!store.reserveBytes(session, shortfall)) {
+        store.releaseBytes(session, r.bytes);
+        r.bytes = 0;
+        r.done = true;
+        res.status(507).json({ error: 'insufficient_storage' });
+        return;
+      }
+    } else if (file.size < r.bytes) {
+      store.releaseBytes(session, r.bytes - file.size);
+    }
     r.bytes = file.size;
     r.done = true; // reservation is now owned by the bucket entry
 
@@ -270,6 +283,7 @@ export function healthHandler(_req: Request, res: Response): void {
     uptime_s: Math.floor((Date.now() - START_TIME) / 1000),
     sessions: store.sessions.size,
     members: store.memberCount(),
+    transfers_in_flight: store.inFlightTransferCount(),
     total_bytes: store.totalBytesGlobal,
     total_bytes_pct_of_cap: Math.round((store.totalBytesGlobal / config.maxTotalBytes) * 100),
   });

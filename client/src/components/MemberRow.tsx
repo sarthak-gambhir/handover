@@ -1,5 +1,5 @@
 import { FaEllipsisVertical, FaPaperPlane } from 'react-icons/fa6';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Badge } from './ui/Badge';
 import { PresenceDot } from './ui/PresenceDot';
 import { Button } from './ui/Button';
@@ -26,8 +26,27 @@ export function MemberRow({
   onMakeOwner,
 }: MemberRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuWrapRef = useRef<HTMLDivElement | null>(null);
   const canSend = !isYou && member.online;
   const canManage = viewerIsOwner && !isYou;
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onDocClick(e: MouseEvent) {
+      if (menuWrapRef.current && !menuWrapRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
 
   return (
     <li className="member_row">
@@ -54,18 +73,21 @@ export function MemberRow({
           </Button>
         )}
         {canManage && (
-          <div className="member_row_menu_wrap">
+          <div className="member_row_menu_wrap" ref={menuWrapRef}>
             <Button
               size="sm"
               variant="ghost"
               icon={<FaEllipsisVertical size={16} />}
               aria-label="Member actions"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
               onClick={() => setMenuOpen((v) => !v)}
             />
             {menuOpen && (
-              <div className={cx('member_row_menu')}>
+              <div className={cx('member_row_menu')} role="menu">
                 <button
                   className="member_row_menu_item"
+                  role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
                     onMakeOwner(member);
@@ -75,6 +97,7 @@ export function MemberRow({
                 </button>
                 <button
                   className="member_row_menu_item member_row_menu_danger"
+                  role="menuitem"
                   onClick={() => {
                     setMenuOpen(false);
                     onKick(member);

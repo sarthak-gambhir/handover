@@ -120,6 +120,27 @@ describe('requireMember', () => {
     expect(refreshed?.opts.maxAge).toBe(config.memberCookieMaxAgeS * 1000);
   });
 
+  it('an admitted knocker token refreshes with the member Max-Age (cookie upgrade)', () => {
+    // Knock sets a short-lived pending cookie; admission upgrades the token to
+    // member. The first authenticated request must re-issue the cookie with the
+    // longer member Max-Age so HTTP auth does not expire after the pending TTL.
+    const { session } = store.createSession();
+    const { knocker } = store.addKnocker(session, 'Alice');
+    const member = store.admitKnocker(session, knocker.knock_id)!;
+    const token = member.session_token;
+
+    const req = makeReq(session.slug, { [cookieName(session.slug)]: token });
+    const res = makeRes();
+    let called = false;
+    requireMember(req, res as unknown as Response, () => {
+      called = true;
+    });
+    expect(called).toBe(true);
+    const refreshed = res.cookies.find((c) => c.name === cookieName(session.slug));
+    expect(refreshed?.value).toBe(token);
+    expect(refreshed?.opts.maxAge).toBe(config.memberCookieMaxAgeS * 1000);
+  });
+
   it('multi-session scoping: revoking one session does not affect the other', () => {
     const a = store.createSession();
     const b = store.createSession();

@@ -13,6 +13,16 @@
   padding-top: var(--space_4);
 }
 
+.session_reconnecting {
+  padding: var(--space_2) var(--space_3);
+  background: var(--bg_overlay);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius_md);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
 .session_fatal {
   max-width: 420px;
   margin: 0 auto;

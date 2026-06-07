@@ -35,7 +35,7 @@ Open the client, click **Create new session**, share the slug, and have a second
 | `npm run dev`       | Run client + server concurrently                       |
 | `npm run build`     | Build server then client                               |
 | `npm start`         | Run the built server (serves the built client in prod) |
-| `npm test`          | Run the server Vitest suite                            |
+| `npm test`          | Run the server then client Vitest suites               |
 | `npm run lint`      | Typecheck both packages                                |
 | `npm run typecheck` | Typecheck both packages                                |
 
@@ -87,7 +87,7 @@ All server config is optional and has defaults (see `server/.env.example`).
 - **Verify CSP in production**: load the app and confirm there are no CSP violations in the browser console; check the `Content-Security-Policy` response header is present and that `script-src`/`style-src` are `'self'`.
 - **Graceful shutdown**: on `SIGTERM` the server stops accepting connections, notifies members, and clears in-memory state. All data is intentionally lost on restart.
 - **Memory sizing**: the bucket lives in process memory. Size `MAX_TOTAL_BYTES` well under the container/host memory limit and run the server with adequate `--max-old-space-size` (the `start` script sets 2048 MB).
-- **Dev dependency advisory**: `npm audit` reports a critical advisory (GHSA-5xrq-8626-4rwp) against Vitest. It only applies when the **Vitest UI server** (`vitest --ui`) is running, which this project never does — tests run via `vitest run`. Vitest is a dev-only dependency and is not shipped. Upgrading to the “fixed” v4 line reintroduces a worker-spawn failure when `npm` runs scripts under `cmd.exe` on Windows, so we pin Vitest 3.
+- **Dev dependency advisory**: `npm audit` reports a critical advisory (GHSA-5xrq-8626-4rwp) against Vitest. It only applies when the **Vitest UI server** (`vitest --ui`) is running, which this project never does — tests run via `vitest run`. Vitest is a dev-only dependency in both the server and client packages and is not shipped. Upgrading to the “fixed” v4 line reintroduces a worker-spawn failure when `npm` runs scripts under `cmd.exe` on Windows, so both packages pin Vitest 3.
 
 ## Manual test checklist
 

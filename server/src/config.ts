@@ -35,6 +35,9 @@ export const config = {
   // Knock queue
   knockQueueCap: 50,
 
+  // Ownership offer TTL (ms) — an unaccepted offer expires after this.
+  ownerOfferTtlMs: 60 * 1000,
+
   // Signaling per-state timeouts (ms)
   transferTimeouts: {
     requested: 30 * 1000,

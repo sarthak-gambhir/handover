@@ -25,6 +25,24 @@ type AppSocket = Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, So
 
 const MAX_TRANSFER_FILES = 32;
 
+// Per-event payload size limits (defence in depth on top of maxHttpBufferSize).
+const MAX_SDP_BYTES = 64 * 1024;
+const MAX_ICE_BYTES = 8 * 1024;
+
+/** Rough serialized size of a signaling payload value. */
+function approxBytes(v: unknown): number {
+  if (typeof v === 'string') return v.length;
+  try {
+    return JSON.stringify(v).length;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function denyOwnerAction(socket: AppSocket): void {
+  socket.emit('error', { code: 'owner_only', message: 'owner action not permitted' });
+}
+
 // transfer:request rate limit — 20/min/sender (sliding window).
 const requestTimestamps = new Map<string, number[]>();
 function allowTransferRequest(user_id: string): boolean {
@@ -37,6 +55,18 @@ function allowTransferRequest(user_id: string): boolean {
   arr.push(now);
   requestTimestamps.set(user_id, arr);
   return true;
+}
+
+/** Drop a departed user's rate-limit bucket so the map can't grow unbounded. */
+function forgetTransferRate(user_id: string): void {
+  requestTimestamps.delete(user_id);
+}
+
+/** Periodically evict fully-stale buckets (covers users lost to session timeouts). */
+function pruneTransferRates(now: number = Date.now()): void {
+  for (const [uid, arr] of requestTimestamps) {
+    if (arr.every((t) => now - t >= 60_000)) requestTimestamps.delete(uid);
+  }
 }
 
 function logTransfer(session: Session, transfer: TransferState, from: TransferStateName): void {
@@ -61,6 +91,11 @@ function broadcastMembers(io: Server, session: Session): void {
 }
 
 export function registerWs(io: Server): void {
+  // Evict stale transfer rate-limit buckets so the map can't leak as users
+  // come and go (including those removed by session/idle timeouts).
+  const ratePrune = setInterval(() => pruneTransferRates(), 5 * 60_000);
+  if (typeof ratePrune.unref === 'function') ratePrune.unref();
+
   // Sweeper-driven broadcasts.
   store.on('knock:expired', ({ slug, knock_id, socket_id }) => {
     const session = store.getSession(slug);
@@ -83,6 +118,13 @@ export function registerWs(io: Server): void {
     const payload = { transfer_id: transfer.transfer_id };
     emitTo(io, memberByUserId(session, transfer.from_user_id), 'transfer:expired', payload);
     emitTo(io, memberByUserId(session, transfer.to_user_id), 'transfer:expired', payload);
+  });
+
+  store.on('owner_offer:expired', ({ slug, to_user_id, from_user_id }) => {
+    const session = store.getSession(slug);
+    if (!session) return;
+    emitTo(io, memberByUserId(session, from_user_id), 'owner_offer:expired', { to_user_id });
+    emitTo(io, memberByUserId(session, to_user_id), 'owner_offer:expired', { to_user_id });
   });
 
   io.on('connection', (socket: AppSocket) => {
@@ -239,10 +281,17 @@ function getOwnerContext(
 
 function handleAdmit(io: Server, socket: AppSocket, p: { knock_id?: string }): void {
   const ctx = getOwnerContext(socket);
-  if (!ctx || !p.knock_id) return;
+  if (!ctx) {
+    denyOwnerAction(socket);
+    return;
+  }
+  if (!p.knock_id) return;
   const { session } = ctx;
   const knocker = session.knockers.get(p.knock_id);
-  if (!knocker) return;
+  if (!knocker) {
+    socket.emit('error', { code: 'knock_not_found', message: 'no such knock' });
+    return;
+  }
   const waitingSocketId = knocker.socket_id;
 
   const member = store.admitKnocker(session, p.knock_id);
@@ -264,7 +313,11 @@ function handleAdmit(io: Server, socket: AppSocket, p: { knock_id?: string }): v
 
 function handleReject(io: Server, socket: AppSocket, p: { knock_id?: string }): void {
   const ctx = getOwnerContext(socket);
-  if (!ctx || !p.knock_id) return;
+  if (!ctx) {
+    denyOwnerAction(socket);
+    return;
+  }
+  if (!p.knock_id) return;
   const knocker = store.removeKnocker(ctx.session, p.knock_id);
   if (knocker?.socket_id) io.to(knocker.socket_id).emit('rejected', {});
   // Clear the resolved knock from the owner's queue.
@@ -275,11 +328,18 @@ function handleReject(io: Server, socket: AppSocket, p: { knock_id?: string }): 
 
 function handleKick(io: Server, socket: AppSocket, p: { user_id?: string }): void {
   const ctx = getOwnerContext(socket);
-  if (!ctx || !p.user_id) return;
+  if (!ctx) {
+    denyOwnerAction(socket);
+    return;
+  }
+  if (!p.user_id) return;
   const { session } = ctx;
   if (p.user_id === session.owner_user_id) return; // can't kick the owner
   const target = session.members.get(p.user_id);
-  if (!target) return;
+  if (!target) {
+    socket.emit('error', { code: 'member_not_found', message: 'no such member' });
+    return;
+  }
 
   const targetSocketId = target.socket_id;
 
@@ -293,6 +353,7 @@ function handleKick(io: Server, socket: AppSocket, p: { user_id?: string }): voi
 
   // Remove the member (also purges token + deletes their bucket files).
   store.removeMember(session, p.user_id);
+  forgetTransferRate(p.user_id);
 
   for (const id of fileIds) io.to(room(session.slug)).emit('file:removed', { id });
   for (const { transfer, other_user_id } of cancelled) {
@@ -314,18 +375,38 @@ function handleKick(io: Server, socket: AppSocket, p: { user_id?: string }): voi
 
 function handlePause(io: Server, socket: AppSocket, p: { paused?: boolean }): void {
   const ctx = getOwnerContext(socket);
-  if (!ctx) return;
+  if (!ctx) {
+    denyOwnerAction(socket);
+    return;
+  }
   ctx.session.knocking_paused = Boolean(p.paused);
-  emitTo(io, ctx.owner, 'knocking:paused', { paused: ctx.session.knocking_paused });
+  // Broadcast to the whole room so every client reflects the pause state, not
+  // just the owner's own tab.
+  io.to(room(ctx.session.slug)).emit('knocking:paused', { paused: ctx.session.knocking_paused });
 }
 
 // ---- owner: transfer ownership ---------------------------------------------
 
 function handleOwnershipOffer(io: Server, socket: AppSocket, p: { to_user_id?: string }): void {
   const ctx = getOwnerContext(socket);
-  if (!ctx || !p.to_user_id) return;
+  if (!ctx) {
+    denyOwnerAction(socket);
+    return;
+  }
+  if (!p.to_user_id) return;
   const target = ctx.session.members.get(p.to_user_id);
-  if (!target) return;
+  if (!target || target.is_owner) {
+    socket.emit('error', { code: 'member_not_found', message: 'no such member' });
+    return;
+  }
+  // Record the offer so only this target can later accept it (and only before
+  // it expires). Overwrites any prior outstanding offer from this owner.
+  ctx.session.pending_owner_offer = {
+    to_user_id: p.to_user_id,
+    from_user_id: ctx.owner.user_id,
+    created_at: Date.now(),
+  };
+  store.touch(ctx.session);
   emitTo(io, target, 'owner_offered', { from_user_id: ctx.owner.user_id });
 }
 
@@ -336,6 +417,18 @@ function handleOwnerAccept(io: Server, socket: AppSocket): void {
   if (!session) return;
   const accepter = session.members.get(data.user_id);
   if (!accepter || accepter.is_owner) return;
+  // Require a matching, non-expired offer addressed to this member. Without
+  // this check any member could seize ownership by emitting `owner_accept`.
+  const offer = session.pending_owner_offer;
+  if (!offer || offer.to_user_id !== data.user_id) {
+    socket.emit('error', { code: 'no_pending_offer', message: 'no ownership offer to accept' });
+    return;
+  }
+  if (Date.now() - offer.created_at > config.ownerOfferTtlMs) {
+    session.pending_owner_offer = null;
+    socket.emit('error', { code: 'offer_expired', message: 'the ownership offer expired' });
+    return;
+  }
   if (store.transferOwnership(session, data.user_id)) {
     io.to(room(session.slug)).emit('owner:changed', { new_owner_user_id: data.user_id });
     broadcastMembers(io, session);
@@ -347,6 +440,11 @@ function handleOwnerDecline(io: Server, socket: AppSocket): void {
   if (!data || data.role !== 'member' || !data.user_id) return;
   const session = store.getSession(data.slug);
   if (!session) return;
+  // Only clear an offer that was actually addressed to the decliner.
+  const offer = session.pending_owner_offer;
+  if (offer && offer.to_user_id === data.user_id) {
+    session.pending_owner_offer = null;
+  }
   const owner = session.members.get(session.owner_user_id);
   emitTo(io, owner, 'owner_declined', { by_user_id: data.user_id });
 }
@@ -367,11 +465,16 @@ function senderContext(
 function handleTransferRequest(
   io: Server,
   socket: AppSocket,
-  p: { to_user_id?: string; files?: TransferFileMeta[] },
+  p: { to_user_id?: string; files?: TransferFileMeta[]; client_ref?: string },
 ): void {
   const ctx = senderContext(socket);
   if (!ctx || !p.to_user_id) return;
   const { session, user_id } = ctx;
+  // Opaque client correlation token, echoed back so the sender can map the
+  // server-issued transfer_id to the exact pending send (robust to concurrent
+  // sends to the same recipient). Bounded to avoid abuse.
+  const clientRef =
+    typeof p.client_ref === 'string' && p.client_ref.length <= 64 ? p.client_ref : undefined;
 
   if (p.to_user_id === user_id) {
     socket.emit('error', { code: 'invalid_target', message: 'cannot send to yourself' });
@@ -403,6 +506,7 @@ function handleTransferRequest(
   socket.emit('transfer:created', {
     transfer_id: transfer.transfer_id,
     to_user_id: p.to_user_id,
+    client_ref: clientRef,
   });
   emitTo(io, recipient, 'transfer:request', {
     transfer_id: transfer.transfer_id,
@@ -466,6 +570,10 @@ function handleTransferResponse(
 function handleOffer(io: Server, socket: AppSocket, p: { transfer_id?: string; sdp?: unknown }): void {
   const r = authorizeSignaling(socket, p.transfer_id, { actor: 'from', states: ['accepted'] });
   if (!r) return;
+  if (p.sdp === undefined || approxBytes(p.sdp) > MAX_SDP_BYTES) {
+    socket.emit('error', { code: 'invalid_payload', message: 'missing or oversized sdp' });
+    return;
+  }
   const { session, transfer } = r;
   const from = transfer.state;
   store.setTransferState(transfer, 'offering');
@@ -479,6 +587,10 @@ function handleOffer(io: Server, socket: AppSocket, p: { transfer_id?: string; s
 function handleAnswer(io: Server, socket: AppSocket, p: { transfer_id?: string; sdp?: unknown }): void {
   const r = authorizeSignaling(socket, p.transfer_id, { actor: 'to', states: ['offering'] });
   if (!r) return;
+  if (p.sdp === undefined || approxBytes(p.sdp) > MAX_SDP_BYTES) {
+    socket.emit('error', { code: 'invalid_payload', message: 'missing or oversized sdp' });
+    return;
+  }
   const { session, transfer } = r;
   const from = transfer.state;
   store.setTransferState(transfer, 'answered');
@@ -499,6 +611,10 @@ function handleIce(
     states: ['offering', 'answered'],
   });
   if (!r) return;
+  if (p.candidate === undefined || approxBytes(p.candidate) > MAX_ICE_BYTES) {
+    socket.emit('error', { code: 'invalid_payload', message: 'missing or oversized candidate' });
+    return;
+  }
   const { session, transfer, user_id } = r;
   emitTo(io, memberByUserId(session, otherPeer(transfer, user_id)), 'webrtc:ice', {
     transfer_id: transfer.transfer_id,
@@ -575,6 +691,7 @@ function handleLeave(io: Server, socket: AppSocket, ack?: () => void): void {
   }
   cancelPeerTransfers(io, session, data.user_id);
   store.removeMember(session, data.user_id);
+  forgetTransferRate(data.user_id);
   io.to(room(session.slug)).emit('member:left', { user_id: data.user_id });
   broadcastMembers(io, session);
   socket.leave(room(session.slug));

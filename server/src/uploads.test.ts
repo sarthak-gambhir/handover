@@ -44,6 +44,18 @@ function cookieHeader(slug: string, token: string): string {
   return `${cookieName(slug)}=${token}`;
 }
 
+describe('POST /api/sessions', () => {
+  it('creates a session, returns the slug + owner id, and sets a member cookie', async () => {
+    const res = await request(server).post('/api/sessions');
+    expect(res.status).toBe(201);
+    expect(typeof res.body.slug).toBe('string');
+    expect(typeof res.body.owner_user_id).toBe('string');
+    expect(store.sessions.has(res.body.slug)).toBe(true);
+    const setCookie = res.headers['set-cookie'] as unknown as string[] | undefined;
+    expect(setCookie?.some((c) => c.startsWith(`${cookieName(res.body.slug)}=`))).toBe(true);
+  });
+});
+
 describe('POST /api/sessions/:slug/files', () => {
   it('accepts a small upload, canonicalises the name, accounts the bytes', async () => {
     const { slug, token, session } = newOwnerSession();
@@ -56,6 +68,21 @@ describe('POST /api/sessions/:slug/files', () => {
     expect(res.body.size).toBe(11);
     expect(session.bucket.size).toBe(1);
     expect(session.total_bytes).toBe(11);
+  });
+
+  it('accounts the real file size, not the (larger) multipart Content-Length', async () => {
+    // The multipart request body (boundaries + headers) is larger than the file
+    // itself, so the reservation is reconciled down to the stored bytes. This
+    // guards the byte-accounting path against over- or under-charging.
+    const { slug, token, session } = newOwnerSession();
+    const res = await request(server)
+      .post(`/api/sessions/${slug}/files`)
+      .set('Cookie', cookieHeader(slug, token))
+      .attach('file', Buffer.alloc(4096, 7), 'blob.bin');
+    expect(res.status).toBe(201);
+    expect(res.body.size).toBe(4096);
+    expect(session.total_bytes).toBe(4096);
+    expect(store.totalBytesGlobal).toBe(4096);
   });
 
   it('401 without a cookie', async () => {

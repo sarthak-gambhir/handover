@@ -258,6 +258,78 @@ describe('peer departure cancels in-flight transfers (G11)', () => {
   }, 9000);
 });
 
+describe('ownership transfer requires a matching offer', () => {
+  beforeEach(() => {
+    store.sessions.clear();
+    store.tokens.clear();
+  });
+
+  it('a member cannot seize ownership without an offer', async () => {
+    const s = await setup();
+    const err = once<{ code: string }>(s.A.sock, 'error');
+    s.A.sock.emit('owner_accept');
+    expect((await err).code).toBe('no_pending_offer');
+    expect(s.session.owner_user_id).toBe(s.O.id);
+    expect(s.session.members.get(s.A.id)?.is_owner).toBe(false);
+  });
+
+  it('only the offered member can accept (offer to A, B cannot take it)', async () => {
+    const s = await setup();
+    const offered = once<{ from_user_id: string }>(s.A.sock, 'owner_offered');
+    s.O.sock.emit('transfer_ownership', { to_user_id: s.A.id });
+    await offered;
+
+    const err = once<{ code: string }>(s.B.sock, 'error');
+    s.B.sock.emit('owner_accept');
+    expect((await err).code).toBe('no_pending_offer');
+    expect(s.session.owner_user_id).toBe(s.O.id);
+  });
+
+  it('the offered member accepts and ownership transfers', async () => {
+    const s = await setup();
+    const offered = once(s.A.sock, 'owner_offered');
+    s.O.sock.emit('transfer_ownership', { to_user_id: s.A.id });
+    await offered;
+
+    const changed = once<{ new_owner_user_id: string }>(s.O.sock, 'owner:changed');
+    s.A.sock.emit('owner_accept');
+    expect((await changed).new_owner_user_id).toBe(s.A.id);
+    expect(s.session.owner_user_id).toBe(s.A.id);
+    expect(s.session.members.get(s.A.id)?.is_owner).toBe(true);
+    expect(s.session.members.get(s.O.id)?.is_owner).toBe(false);
+    expect(s.session.pending_owner_offer).toBeNull();
+  });
+
+  it('an offer expires via the sweeper and can no longer be accepted', async () => {
+    const s = await setup();
+    const offered = once(s.A.sock, 'owner_offered');
+    s.O.sock.emit('transfer_ownership', { to_user_id: s.A.id });
+    await offered;
+
+    const expiredO = once(s.O.sock, 'owner_offer:expired');
+    const expiredA = once(s.A.sock, 'owner_offer:expired');
+    const now = Date.now();
+    s.session.last_activity = now;
+    s.session.pending_owner_offer!.created_at = now - config.ownerOfferTtlMs - 1000;
+    store.sweep(now);
+    await Promise.all([expiredO, expiredA]);
+    expect(s.session.pending_owner_offer).toBeNull();
+
+    const err = once<{ code: string }>(s.A.sock, 'error');
+    s.A.sock.emit('owner_accept');
+    expect((await err).code).toBe('no_pending_offer');
+    expect(s.session.owner_user_id).toBe(s.O.id);
+  });
+
+  it('a non-owner cannot offer ownership', async () => {
+    const s = await setup();
+    const err = once<{ code: string }>(s.A.sock, 'error');
+    s.A.sock.emit('transfer_ownership', { to_user_id: s.B.id });
+    expect((await err).code).toBe('owner_only');
+    expect(s.session.pending_owner_offer).toBeNull();
+  });
+});
+
 describe('one tab per session', () => {
   beforeEach(() => {
     store.sessions.clear();
