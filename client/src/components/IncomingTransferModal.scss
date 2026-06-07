@@ -1,0 +1,58 @@
+@use '../styles/mixins' as m;
+
+.incoming_transfer_modal_list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_2);
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: var(--space_3);
+}
+
+.incoming_transfer_modal_item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space_3);
+  font-size: 13px;
+}
+
+.incoming_transfer_modal_name {
+  @include m.truncate;
+  color: var(--fg);
+}
+
+.incoming_transfer_modal_size {
+  @include m.mono_text;
+  color: var(--fg_muted);
+  flex-shrink: 0;
+}
+
+.incoming_transfer_modal_note {
+  font-size: 12px;
+  color: var(--fg_muted);
+  margin-bottom: var(--space_3);
+}
+
+.incoming_transfer_modal_warn {
+  display: flex;
+  gap: var(--space_2);
+  align-items: flex-start;
+  font-size: 12px;
+  color: var(--warn);
+  background: rgba(245, 165, 36, 0.1);
+  border-radius: var(--radius_md);
+  padding: var(--space_3);
+  margin-bottom: var(--space_3);
+  line-height: 1.5;
+}
+
+.incoming_transfer_modal_confirm {
+  display: flex;
+  gap: var(--space_2);
+  align-items: flex-start;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+  line-height: 1.4;
+}

@@ -1,0 +1,43 @@
+// colors
+$bg:             #0a0a0b;
+$bg_elevated:    #131316;
+$bg_overlay:     #1c1c21;
+$border:         #26262c;
+$border_strong:  #3a3a44;
+$fg:             #ededf0;
+$fg_muted:       #9a9aa6;
+$fg_subtle:      #5e5e6b;
+$accent:         #7c5cff;
+$accent_soft:    rgba(124, 92, 255, 0.12);
+$success:        #3ecf8e;
+$warn:           #f5a524;
+$danger:         #ef4444;
+
+// radii
+$radius_sm:  6px;
+$radius_md:  8px;
+$radius_lg:  12px;
+$radius_xl:  16px;
+
+// typography
+$font_sans:  'Inter Variable', system-ui, sans-serif;
+$font_mono:  'JetBrains Mono Variable', ui-monospace, monospace;
+
+// spacing scale (8px-based)
+$space_1:  4px;
+$space_2:  8px;
+$space_3:  12px;
+$space_4:  16px;
+$space_5:  24px;
+$space_6:  32px;
+$space_7:  48px;
+
+// motion
+$duration_fast:  150ms;
+$duration_med:   200ms;
+$duration_slow:  300ms;
+$ease_out:       cubic-bezier(0.16, 1, 0.3, 1);
+$ease_in:        cubic-bezier(0.7, 0, 0.84, 0);
+
+// breakpoint
+$bp_sm: 640px;

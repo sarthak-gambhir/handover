@@ -1,0 +1,16 @@
+.presence_dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background var(--duration_med) var(--ease_out);
+}
+
+.presence_dot_online {
+  background: var(--success);
+}
+
+.presence_dot_offline {
+  background: var(--fg_subtle);
+}

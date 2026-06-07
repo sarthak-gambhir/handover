@@ -1,0 +1,38 @@
+@use '../../styles/mixins' as m;
+
+.input_field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_2);
+}
+
+.input_label {
+  font-size: 13px;
+  color: var(--fg_muted);
+  font-weight: 500;
+}
+
+.input {
+  height: 40px;
+  width: 100%;
+  padding: 0 var(--space_3);
+  background: var(--bg_elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius_md);
+  color: var(--fg);
+  font-size: 14px;
+  transition: border-color var(--duration_fast) var(--ease_out);
+  @include m.focus_ring;
+
+  &::placeholder {
+    color: var(--fg_subtle);
+  }
+
+  &:focus {
+    border-color: var(--accent);
+  }
+}
+
+.input_mono {
+  @include m.mono_text;
+}

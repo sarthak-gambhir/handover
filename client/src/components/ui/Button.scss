@@ -1,0 +1,100 @@
+@use '../../styles/mixins' as m;
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space_2);
+  border-radius: var(--radius_md);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--duration_fast) var(--ease_out),
+    border-color var(--duration_fast) var(--ease_out),
+    color var(--duration_fast) var(--ease_out),
+    opacity var(--duration_fast) var(--ease_out);
+  border: 1px solid transparent;
+  @include m.focus_ring;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.button_md {
+  height: 40px;
+  padding: 0 var(--space_4);
+  font-size: 14px;
+}
+
+.button_sm {
+  height: 32px;
+  padding: 0 var(--space_3);
+  font-size: 13px;
+}
+
+.button_primary {
+  background: var(--accent);
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: #6a4ce0;
+  }
+}
+
+.button_secondary {
+  background: var(--bg_overlay);
+  border-color: var(--border_strong);
+  color: var(--fg);
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+}
+
+.button_ghost {
+  background: transparent;
+  color: var(--fg_muted);
+
+  &:hover:not(:disabled) {
+    background: var(--bg_overlay);
+    color: var(--fg);
+  }
+}
+
+.button_danger {
+  background: transparent;
+  border-color: var(--border_strong);
+  color: var(--danger);
+
+  &:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: var(--danger);
+  }
+}
+
+.button_icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.button_label {
+  display: inline-flex;
+  align-items: center;
+}
+
+.button_spinner {
+  animation: button_spin 0.8s linear infinite;
+}
+
+.button_loading {
+  pointer-events: none;
+}
+
+@keyframes button_spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

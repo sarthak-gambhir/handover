@@ -1,0 +1,13 @@
+.app_container {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.app_main {
+  flex: 1;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space_5) var(--space_4);
+}

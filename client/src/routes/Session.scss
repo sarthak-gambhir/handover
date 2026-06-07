@@ -1,0 +1,132 @@
+@use '../styles/mixins' as m;
+
+.session {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_4);
+}
+
+.session_loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_4);
+  padding-top: var(--space_4);
+}
+
+.session_fatal {
+  max-width: 420px;
+  margin: 0 auto;
+  padding-top: var(--space_7);
+  text-align: center;
+}
+
+.session_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space_3);
+  padding-bottom: var(--space_4);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.session_header_info {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space_3);
+}
+
+.session_slug {
+  @include m.mono_text;
+  font-size: 18px;
+  color: var(--fg);
+}
+
+.session_count {
+  font-size: 13px;
+  color: var(--fg_muted);
+}
+
+.session_header_actions {
+  display: flex;
+  gap: var(--space_2);
+}
+
+.session_owner_panel {
+  width: 100%;
+}
+
+.session_owner_head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space_3);
+  margin-bottom: var(--space_3);
+  flex-wrap: wrap;
+}
+
+.session_owner_title {
+  display: flex;
+  align-items: center;
+  gap: var(--space_2);
+  font-size: 15px;
+}
+
+.session_owner_empty {
+  font-size: 13px;
+  color: var(--fg_muted);
+}
+
+.session_knock_list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_2);
+}
+
+.session_grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space_4);
+
+  @include m.sm_up {
+    grid-template-columns: minmax(260px, 32%) 1fr;
+    align-items: start;
+  }
+}
+
+.session_section_title {
+  display: flex;
+  align-items: center;
+  gap: var(--space_2);
+  font-size: 14px;
+  color: var(--fg_muted);
+  margin-bottom: var(--space_3);
+  margin-top: var(--space_2);
+}
+
+.session_member_list,
+.session_transfer_list,
+.session_file_list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_2);
+}
+
+.session_members {
+  order: 2;
+
+  @include m.sm_up {
+    order: 1;
+  }
+}
+
+.session_bucket {
+  order: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_4);
+
+  @include m.sm_up {
+    order: 2;
+  }
+}

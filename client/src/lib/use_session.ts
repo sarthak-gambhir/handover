@@ -1,0 +1,492 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { api } from './api';
+import type { PublicMember, PublicBucketEntry } from './api';
+import { createSocket, type AppSocket, type TransferFileMeta } from './socket';
+import { sessionStore } from './sessionStore';
+import { useToast } from '../components/ui/Toast';
+import type { Knock } from '../components/KnockQueueItem';
+import type { IncomingRequest } from '../components/IncomingTransferModal';
+import { SenderConnection, ReceiverConnection, type PeerCallbacks } from './webrtc';
+import { type TransferVM, type TransferStatus, isTerminal } from './transfer_types';
+import { randomId } from './id';
+
+export interface UploadVM {
+  tempId: string;
+  entry: PublicBucketEntry;
+  fraction: number;
+  abort: () => void;
+}
+
+type Conn = SenderConnection | ReceiverConnection;
+
+interface RateSample {
+  bytes: number;
+  at: number;
+}
+
+export function useSession(slug: string) {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<'connecting' | 'live' | 'fatal'>('connecting');
+  const [fatalMessage, setFatalMessage] = useState('');
+  const [members, setMembers] = useState<PublicMember[]>([]);
+  const [bucket, setBucket] = useState<PublicBucketEntry[]>([]);
+  const [knockers, setKnockers] = useState<Knock[]>([]);
+  const [knockingPaused, setKnockingPaused] = useState(false);
+  const [yourUserId, setYourUserId] = useState('');
+  const [ownerUserId, setOwnerUserId] = useState('');
+  const [uploads, setUploads] = useState<UploadVM[]>([]);
+  const [transfers, setTransfers] = useState<TransferVM[]>([]);
+  const [incoming, setIncoming] = useState<IncomingRequest | null>(null);
+  const [ownerOffer, setOwnerOffer] = useState<{ from_user_id: string } | null>(null);
+  const [justAdded, setJustAdded] = useState<Set<string>>(new Set());
+
+  const socketRef = useRef<AppSocket | null>(null);
+  const connRef = useRef<Map<string, Conn>>(new Map());
+  const filesRef = useRef<Map<string, File[]>>(new Map());
+  const outgoingQueue = useRef<Array<{ key: string; to_user_id: string }>>([]);
+  const rateRef = useRef<Map<string, RateSample>>(new Map());
+
+  const isOwner = yourUserId !== '' && yourUserId === ownerUserId;
+  const nameOf = useCallback(
+    (uid: string) => members.find((m) => m.user_id === uid)?.display_name ?? 'Member',
+    [members],
+  );
+
+  // ---- transfer VM helpers ----
+  const patchTransfer = useCallback((key: string, patch: Partial<TransferVM>) => {
+    setTransfers((prev) => prev.map((t) => (t.key === key ? { ...t, ...patch } : t)));
+  }, []);
+
+  const patchTransferById = useCallback(
+    (transfer_id: string, patch: Partial<TransferVM> | ((t: TransferVM) => Partial<TransferVM>)) => {
+      setTransfers((prev) =>
+        prev.map((t) =>
+          t.transfer_id === transfer_id
+            ? { ...t, ...(typeof patch === 'function' ? patch(t) : patch) }
+            : t,
+        ),
+      );
+    },
+    [],
+  );
+
+  const onProgressFor = useCallback(
+    (transfer_id: string) => (p: { fraction: number; transferred: number; total: number }) => {
+      const now = Date.now();
+      const last = rateRef.current.get(transfer_id);
+      let bytesPerSec: number | undefined;
+      let etaSec: number | undefined;
+      if (last && now > last.at) {
+        bytesPerSec = ((p.transferred - last.bytes) * 1000) / (now - last.at);
+        if (bytesPerSec > 0) etaSec = (p.total - p.transferred) / bytesPerSec;
+      }
+      rateRef.current.set(transfer_id, { bytes: p.transferred, at: now });
+      patchTransferById(transfer_id, { fraction: p.fraction, status: 'transferring', bytesPerSec, etaSec });
+    },
+    [patchTransferById],
+  );
+
+  const setTerminalById = useCallback(
+    (transfer_id: string, st: TransferStatus, message?: string) => {
+      patchTransferById(transfer_id, { status: st, message });
+      connRef.current.get(transfer_id)?.cancel();
+      connRef.current.delete(transfer_id);
+    },
+    [patchTransferById],
+  );
+
+  const buildReceiverCallbacks = useCallback(
+    (transfer_id: string): PeerCallbacks => ({
+      sendOffer: (sdp) => socketRef.current?.emit('webrtc:offer', { transfer_id, sdp }),
+      sendAnswer: (sdp) => socketRef.current?.emit('webrtc:answer', { transfer_id, sdp }),
+      sendIce: (candidate) => socketRef.current?.emit('webrtc:ice', { transfer_id, candidate }),
+      onProgress: onProgressFor(transfer_id),
+      onComplete: () => {
+        patchTransferById(transfer_id, { status: 'complete', fraction: 1 });
+        connRef.current.delete(transfer_id);
+      },
+      onFailure: (reason, message) => {
+        socketRef.current?.emit('transfer:cancel', { transfer_id, reason });
+        setTerminalById(transfer_id, 'failed', message);
+      },
+    }),
+    [onProgressFor, patchTransferById, setTerminalById],
+  );
+
+  // ---- socket wiring ----
+  useEffect(() => {
+    const socket = createSocket();
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      socket.emit('identify', { slug, tab_id: sessionStore.tabId });
+    });
+
+    socket.on('state:snapshot', (p) => {
+      setStatus('live');
+      setYourUserId(p.your_user_id);
+      setOwnerUserId(p.owner_user_id);
+      setKnockingPaused(p.knocking_paused);
+      setMembers(p.members);
+      setBucket(p.bucket);
+      sessionStore.set({ slug, user_id: p.your_user_id, is_owner: p.your_user_id === p.owner_user_id });
+    });
+
+    socket.on('members:list', (p) => setMembers(p.members));
+    socket.on('member:joined', (p) =>
+      setMembers((prev) =>
+        prev.some((m) => m.user_id === p.member.user_id) ? prev : [...prev, p.member],
+      ),
+    );
+    socket.on('member:left', (p) => setMembers((prev) => prev.filter((m) => m.user_id !== p.user_id)));
+    socket.on('member:online', (p) =>
+      setMembers((prev) => prev.map((m) => (m.user_id === p.user_id ? { ...m, online: true } : m))),
+    );
+    socket.on('member:offline', (p) =>
+      setMembers((prev) => prev.map((m) => (m.user_id === p.user_id ? { ...m, online: false } : m))),
+    );
+
+    socket.on('knock:new', (p) =>
+      setKnockers((prev) => [...prev, { knock_id: p.knock_id, display_name: p.display_name, created_at: p.created_at }]),
+    );
+    socket.on('knock:cancelled', (p) => setKnockers((prev) => prev.filter((k) => k.knock_id !== p.knock_id)));
+    socket.on('knock:expired', (p) => setKnockers((prev) => prev.filter((k) => k.knock_id !== p.knock_id)));
+    socket.on('knocking:paused', (p) => setKnockingPaused(p.paused));
+
+    socket.on('file:added', (p) => {
+      setBucket((prev) => (prev.some((e) => e.id === p.entry.id) ? prev : [...prev, p.entry]));
+      setJustAdded((prev) => new Set(prev).add(p.entry.id));
+      setTimeout(() => {
+        setJustAdded((prev) => {
+          const next = new Set(prev);
+          next.delete(p.entry.id);
+          return next;
+        });
+      }, 1200);
+    });
+    socket.on('file:removed', (p) => setBucket((prev) => prev.filter((e) => e.id !== p.id)));
+
+    socket.on('owner:changed', (p) => {
+      setOwnerUserId(p.new_owner_user_id);
+      setMembers((prev) =>
+        prev.map((m) => ({ ...m, is_owner: m.user_id === p.new_owner_user_id })),
+      );
+    });
+    socket.on('owner_offered', (p) => setOwnerOffer({ from_user_id: p.from_user_id }));
+    socket.on('owner_declined', () => toast('The member declined ownership.', 'warn'));
+
+    // ---- P2P signaling ----
+    socket.on('transfer:created', (p) => {
+      const q = outgoingQueue.current.findIndex((o) => o.to_user_id === p.to_user_id);
+      if (q === -1) return;
+      const { key } = outgoingQueue.current.splice(q, 1)[0];
+      const files = filesRef.current.get(key);
+      if (files) {
+        filesRef.current.delete(key);
+        filesRef.current.set(p.transfer_id, files);
+      }
+      patchTransfer(key, { transfer_id: p.transfer_id });
+    });
+
+    socket.on('transfer:request', (p) => {
+      setIncoming({
+        transfer_id: p.transfer_id,
+        from_user_id: p.from_user_id,
+        from_name: nameOf(p.from_user_id),
+        files: p.files,
+      });
+    });
+
+    socket.on('transfer:response', async (p) => {
+      if (!p.accepted) {
+        setTerminalById(p.transfer_id, 'declined');
+        toast('Transfer declined.', 'warn');
+        return;
+      }
+      patchTransferById(p.transfer_id, { status: 'connecting' });
+      const files = filesRef.current.get(p.transfer_id);
+      if (!files) return;
+      try {
+        const { iceServers } = await api.turn(slug);
+        const conn = new SenderConnection(p.transfer_id, files, iceServers, makeSenderCallbacks(p.transfer_id));
+        connRef.current.set(p.transfer_id, conn);
+        await conn.start();
+      } catch {
+        setTerminalById(p.transfer_id, 'failed', 'Could not start the connection.');
+      }
+    });
+
+    socket.on('webrtc:offer', async (p) => {
+      const conn = connRef.current.get(p.transfer_id);
+      if (conn instanceof ReceiverConnection) await conn.acceptOffer(p.sdp);
+    });
+    socket.on('webrtc:answer', async (p) => {
+      const conn = connRef.current.get(p.transfer_id);
+      if (conn instanceof SenderConnection) await conn.acceptAnswer(p.sdp);
+    });
+    socket.on('webrtc:ice', async (p) => {
+      await connRef.current.get(p.transfer_id)?.addIce(p.candidate);
+    });
+
+    socket.on('transfer:cancelled', (p) => {
+      setTerminalById(p.transfer_id, 'cancelled', p.reason === 'peer_left' ? 'The other person left.' : 'Cancelled.');
+      setIncoming((cur) => (cur?.transfer_id === p.transfer_id ? null : cur));
+    });
+    socket.on('transfer:expired', (p) => setTerminalById(p.transfer_id, 'failed', 'Timed out.'));
+    socket.on('transfer:closed', (p) => patchTransferById(p.transfer_id, { status: 'complete', fraction: 1 }));
+
+    socket.on('kicked', () => {
+      setStatus('fatal');
+      setFatalMessage('You were removed from this session by the owner.');
+      socket.disconnect();
+    });
+    socket.on('session:ended', () => {
+      setStatus('fatal');
+      setFatalMessage('This session has ended.');
+      socket.disconnect();
+    });
+    socket.on('error', (e) => {
+      if (e.code === 'already_open_elsewhere') {
+        setStatus('fatal');
+        setFatalMessage('This session is already open in another tab. Close that tab and reload here.');
+        socket.disconnect();
+      } else if (e.code === 'unauthorized' || e.code === 'session_not_found') {
+        setStatus('fatal');
+        setFatalMessage('You are not a member of this session.');
+        socket.disconnect();
+      }
+    });
+
+    function makeSenderCallbacks(transfer_id: string): PeerCallbacks {
+      return {
+        sendOffer: (sdp) => socket.emit('webrtc:offer', { transfer_id, sdp }),
+        sendAnswer: (sdp) => socket.emit('webrtc:answer', { transfer_id, sdp }),
+        sendIce: (candidate) => socket.emit('webrtc:ice', { transfer_id, candidate }),
+        onProgress: onProgressFor(transfer_id),
+        onComplete: () => {
+          socket.emit('transfer:complete', { transfer_id });
+          patchTransferById(transfer_id, { status: 'complete', fraction: 1 });
+          connRef.current.delete(transfer_id);
+        },
+        onFailure: (reason, message) => {
+          socket.emit('transfer:cancel', { transfer_id, reason });
+          setTerminalById(transfer_id, 'failed', message);
+        },
+      };
+    }
+
+    return () => {
+      for (const c of connRef.current.values()) c.cancel();
+      connRef.current.clear();
+      socket.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
+  // ---- actions ----
+  const startSend = useCallback(
+    (recipient: PublicMember, files: File[]) => {
+      const socket = socketRef.current;
+      if (!socket) return;
+      const key = randomId();
+      filesRef.current.set(key, files);
+      outgoingQueue.current.push({ key, to_user_id: recipient.user_id });
+      const meta: TransferFileMeta[] = files.map((f) => ({ name: f.name, size: f.size }));
+      setTransfers((prev) => [
+        ...prev,
+        {
+          key,
+          transfer_id: null,
+          role: 'sender',
+          peer_user_id: recipient.user_id,
+          peer_name: recipient.display_name,
+          files: meta,
+          fraction: 0,
+          status: 'requesting',
+        },
+      ]);
+      socket.emit('transfer:request', { to_user_id: recipient.user_id, files: meta });
+    },
+    [],
+  );
+
+  const acceptIncoming = useCallback(
+    async (req: IncomingRequest) => {
+      const socket = socketRef.current;
+      if (!socket) return;
+      setIncoming(null);
+      setTransfers((prev) => [
+        ...prev,
+        {
+          key: req.transfer_id,
+          transfer_id: req.transfer_id,
+          role: 'receiver',
+          peer_user_id: req.from_user_id,
+          peer_name: req.from_name,
+          files: req.files,
+          fraction: 0,
+          status: 'connecting',
+        },
+      ]);
+      try {
+        const { iceServers } = await api.turn(slug);
+        const conn = new ReceiverConnection(iceServers, buildReceiverCallbacks(req.transfer_id));
+        connRef.current.set(req.transfer_id, conn);
+        socket.emit('transfer:response', { transfer_id: req.transfer_id, accepted: true });
+      } catch {
+        setTerminalById(req.transfer_id, 'failed', 'Could not prepare to receive.');
+      }
+    },
+    [slug, setTerminalById, buildReceiverCallbacks],
+  );
+
+  const declineIncoming = useCallback((req: IncomingRequest) => {
+    socketRef.current?.emit('transfer:response', { transfer_id: req.transfer_id, accepted: false });
+    setIncoming(null);
+  }, []);
+
+  const cancelTransfer = useCallback((t: TransferVM) => {
+    if (t.transfer_id) {
+      socketRef.current?.emit('transfer:cancel', { transfer_id: t.transfer_id, reason: 'cancelled' });
+      connRef.current.get(t.transfer_id)?.cancel();
+      connRef.current.delete(t.transfer_id);
+    }
+    patchTransfer(t.key, { status: 'cancelled' });
+  }, [patchTransfer]);
+
+  const dismissTransfer = useCallback((t: TransferVM) => {
+    setTransfers((prev) => prev.filter((x) => x.key !== t.key));
+  }, []);
+
+  // ---- bucket uploads ----
+  const uploadFiles = useCallback(
+    (files: File[]) => {
+      for (const file of files) {
+        const tempId = randomId();
+        // imported lazily to avoid a cycle at module top
+        import('./uploadWithProgress').then(({ uploadWithProgress }) => {
+          const handle = uploadWithProgress(slug, file);
+          const placeholder: PublicBucketEntry = {
+            id: tempId,
+            name: file.name,
+            size: file.size,
+            content_type: file.type || 'application/octet-stream',
+            uploader_id: yourUserId,
+            created_at: Date.now(),
+          };
+          setUploads((prev) => [...prev, { tempId, entry: placeholder, fraction: 0, abort: handle.abort }]);
+          handle.onProgress((f) =>
+            setUploads((prev) => prev.map((u) => (u.tempId === tempId ? { ...u, fraction: f } : u))),
+          );
+          handle.promise
+            .then(() => setUploads((prev) => prev.filter((u) => u.tempId !== tempId)))
+            .catch((err: { code?: string }) => {
+              setUploads((prev) => prev.filter((u) => u.tempId !== tempId));
+              if (err?.code === 'insufficient_storage') toast('Server is at capacity — try again in a minute.', 'warn');
+              else if (err?.code === 'file_too_large') toast('That file is over the 100 MB limit.', 'warn');
+              else if (err?.code === 'aborted') {/* silent */}
+              else toast('Upload failed.', 'danger');
+            });
+        });
+      }
+    },
+    [slug, yourUserId, toast],
+  );
+
+  const deleteFile = useCallback(
+    async (id: string) => {
+      try {
+        await api.deleteFile(slug, id);
+      } catch {
+        toast('Could not delete the file.', 'danger');
+      }
+    },
+    [slug, toast],
+  );
+
+  // ---- owner actions ----
+  const admit = useCallback((knock_id: string) => {
+    socketRef.current?.emit('admit', { knock_id });
+    setKnockers((prev) => prev.filter((k) => k.knock_id !== knock_id));
+  }, []);
+  const reject = useCallback((knock_id: string) => {
+    socketRef.current?.emit('reject', { knock_id });
+    setKnockers((prev) => prev.filter((k) => k.knock_id !== knock_id));
+  }, []);
+  const kick = useCallback((user_id: string) => socketRef.current?.emit('kick', { user_id }), []);
+  const makeOwner = useCallback(
+    (user_id: string) => socketRef.current?.emit('transfer_ownership', { to_user_id: user_id }),
+    [],
+  );
+  const setPaused = useCallback(
+    (paused: boolean) => socketRef.current?.emit('knocking:set_paused', { paused }),
+    [],
+  );
+  const acceptOwnership = useCallback(() => {
+    socketRef.current?.emit('owner_accept');
+    setOwnerOffer(null);
+  }, []);
+  const declineOwnership = useCallback(() => {
+    socketRef.current?.emit('owner_decline');
+    setOwnerOffer(null);
+  }, []);
+  const leave = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        const socket = socketRef.current;
+        if (!socket || socket.disconnected) {
+          resolve();
+          return;
+        }
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        };
+        // Resolve on the server's ack so we don't tear down the socket before
+        // 'leave' is processed. Fall back after a short delay if no ack arrives.
+        socket.emit('leave', finish);
+        window.setTimeout(finish, 1500);
+      }),
+    [],
+  );
+
+  const hasActiveWork =
+    uploads.length > 0 || transfers.some((t) => !isTerminal(t.status));
+
+  return {
+    status,
+    fatalMessage,
+    members,
+    bucket,
+    knockers,
+    knockingPaused,
+    yourUserId,
+    ownerUserId,
+    isOwner,
+    uploads,
+    transfers,
+    incoming,
+    ownerOffer,
+    justAdded,
+    hasActiveWork,
+    nameOf,
+    // actions
+    startSend,
+    acceptIncoming,
+    declineIncoming,
+    cancelTransfer,
+    dismissTransfer,
+    uploadFiles,
+    deleteFile,
+    admit,
+    reject,
+    kick,
+    makeOwner,
+    setPaused,
+    acceptOwnership,
+    declineOwnership,
+    leave,
+  };
+}

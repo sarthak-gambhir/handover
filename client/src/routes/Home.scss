@@ -1,0 +1,55 @@
+@use '../styles/mixins' as m;
+
+.home {
+  max-width: 760px;
+  margin: 0 auto;
+  padding-top: var(--space_7);
+}
+
+.home_header {
+  text-align: center;
+  margin-bottom: var(--space_6);
+}
+
+.home_logo {
+  color: var(--accent);
+  margin-bottom: var(--space_3);
+}
+
+.home_title {
+  font-size: 26px;
+  margin-bottom: var(--space_2);
+}
+
+.home_tagline {
+  font-size: 15px;
+  color: var(--fg);
+  max-width: 520px;
+  margin: 0 auto var(--space_2);
+  line-height: 1.5;
+}
+
+.home_subtitle {
+  font-size: 14px;
+  color: var(--fg_muted);
+  max-width: 480px;
+  margin: 0 auto;
+  line-height: 1.5;
+}
+
+.home_cards {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space_4);
+
+  @include m.sm_up {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+.home_join_form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_3);
+}

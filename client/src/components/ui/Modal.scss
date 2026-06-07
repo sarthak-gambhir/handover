@@ -1,0 +1,60 @@
+.modal_backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space_4);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  opacity: 1;
+  transition: opacity var(--duration_med) var(--ease_out);
+}
+
+.modal_backdrop_exiting {
+  opacity: 0;
+}
+
+.modal_card {
+  width: 100%;
+  max-width: 440px;
+  max-height: calc(100vh - var(--space_6));
+  overflow-y: auto;
+  background: var(--bg_elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius_lg);
+  padding: var(--space_5);
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition:
+    opacity var(--duration_med) var(--ease_out),
+    transform var(--duration_med) var(--ease_out);
+}
+
+.modal_card_exiting {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+}
+
+.modal_card_locked {
+  border-color: var(--border_strong);
+}
+
+.modal_title {
+  font-size: 17px;
+  margin-bottom: var(--space_4);
+}
+
+.modal_body {
+  font-size: 14px;
+  color: var(--fg);
+  line-height: 1.5;
+}
+
+.modal_footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space_2);
+  margin-top: var(--space_5);
+}

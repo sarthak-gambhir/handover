@@ -1,0 +1,20 @@
+.upload_dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_2);
+}
+
+.upload_dropzone_icon {
+  color: var(--accent);
+}
+
+.upload_dropzone_title {
+  font-size: 14px;
+  color: var(--fg);
+}
+
+.upload_dropzone_helper {
+  font-size: 12px;
+  color: var(--fg_muted);
+  line-height: 1.5;
+}

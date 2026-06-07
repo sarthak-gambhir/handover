@@ -1,0 +1,89 @@
+export type Knocker = {
+  knock_id: string; // random 16-byte hex
+  display_name: string;
+  session_token: string; // pending token, set as cookie on knock
+  socket_id: string | null; // their waiting-screen socket
+  created_at: number;
+};
+
+export type Member = {
+  user_id: string; // SERVER-generated UUID (issued at admit / create)
+  display_name: string;
+  session_token: string; // 32 random bytes, set as HttpOnly cookie
+  tab_id: string | null; // bound to one tab; null when no socket connected
+  socket_id: string | null; // routing handle only (not auth); null when reconnecting
+  is_owner: boolean;
+  joined_at: number;
+  last_seen: number;
+  offline_grace_timer?: ReturnType<typeof setTimeout> | null;
+};
+
+export type BucketEntry = {
+  id: string; // random 16-byte hex
+  name: string; // canonicalised filename
+  size: number;
+  content_type: string;
+  data: Buffer;
+  uploader_id: string; // member user_id
+  created_at: number;
+};
+
+export type TransferStateName =
+  | 'requested'
+  | 'accepted'
+  | 'declined'
+  | 'offering'
+  | 'answered'
+  | 'closed'
+  | 'cancelled'
+  | 'expired';
+
+export type TransferFileMeta = { name: string; size: number };
+
+export type TransferState = {
+  transfer_id: string; // SERVER-generated random 16-byte hex
+  from_user_id: string; // pinned at request time (NOT socket-bound)
+  to_user_id: string; // pinned at request time
+  state: TransferStateName;
+  files: TransferFileMeta[];
+  created_at: number;
+  state_changed_at: number; // for per-state timeout
+  state_log: Array<{ state: TransferStateName; at: number }>;
+};
+
+export type Session = {
+  slug: string; // canonical lowercase, "purple-otter-77"
+  owner_user_id: string;
+  members: Map<string, Member>; // by user_id
+  knockers: Map<string, Knocker>; // by knock_id
+  bucket: Map<string, BucketEntry>; // by file id
+  transfers: Map<string, TransferState>; // by transfer_id
+  total_bytes: number;
+  last_activity: number;
+  owner_disconnected_at: number | null; // for owner grace
+  knocking_paused: boolean;
+};
+
+// Public projections (never leak tokens / socket ids / buffers)
+export type PublicMember = {
+  user_id: string;
+  display_name: string;
+  is_owner: boolean;
+  online: boolean;
+};
+
+export type PublicBucketEntry = {
+  id: string;
+  name: string;
+  size: number;
+  content_type: string;
+  uploader_id: string;
+  created_at: number;
+};
+
+export const TERMINAL_STATES: ReadonlySet<TransferStateName> = new Set([
+  'declined',
+  'closed',
+  'cancelled',
+  'expired',
+]);

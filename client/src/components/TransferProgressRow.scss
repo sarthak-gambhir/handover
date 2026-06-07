@@ -1,0 +1,80 @@
+@use '../styles/mixins' as m;
+
+.transfer_progress_row {
+  display: flex;
+  align-items: center;
+  gap: var(--space_3);
+  padding: var(--space_3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius_md);
+  background: var(--bg_elevated);
+}
+
+.transfer_progress_row_icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.transfer_progress_row_main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_1);
+}
+
+.transfer_progress_row_head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space_2);
+}
+
+.transfer_progress_row_name {
+  @include m.truncate;
+  font-size: 13px;
+  color: var(--fg);
+}
+
+.transfer_progress_row_peer {
+  font-size: 12px;
+  color: var(--fg_subtle);
+  flex-shrink: 0;
+}
+
+.transfer_progress_row_track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg_overlay);
+  overflow: hidden;
+}
+
+.transfer_progress_row_fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--duration_fast) linear;
+}
+
+.transfer_progress_row_meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--fg_muted);
+}
+
+.transfer_progress_row_stats {
+  @include m.mono_text;
+}
+
+.transfer_progress_row_actions {
+  flex-shrink: 0;
+}
+
+.transfer_progress_row_complete .transfer_progress_row_fill {
+  background: var(--success);
+}
+
+.transfer_progress_row_failed .transfer_progress_row_fill,
+.transfer_progress_row_cancelled .transfer_progress_row_fill,
+.transfer_progress_row_declined .transfer_progress_row_fill {
+  background: var(--danger);
+}

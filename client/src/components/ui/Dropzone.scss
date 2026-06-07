@@ -1,0 +1,47 @@
+@use '../../styles/mixins' as m;
+
+.dropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space_2);
+  padding: var(--space_6) var(--space_4);
+  border: 1.5px dashed var(--border_strong);
+  border-radius: var(--radius_xl);
+  background: var(--bg_elevated);
+  color: var(--fg_muted);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color var(--duration_med) var(--ease_out),
+    background var(--duration_med) var(--ease_out),
+    color var(--duration_med) var(--ease_out);
+  @include m.focus_ring;
+
+  &:hover {
+    border-color: var(--accent);
+    color: var(--fg);
+  }
+}
+
+.dropzone_active {
+  border-color: var(--accent);
+  background: var(--accent_soft);
+  color: var(--fg);
+}
+
+.dropzone_disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+
+  &:hover {
+    border-color: var(--border_strong);
+    color: var(--fg_muted);
+  }
+}
+
+.dropzone_input {
+  display: none;
+}

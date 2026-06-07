@@ -1,0 +1,18 @@
+.card {
+  background: var(--bg_elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius_lg);
+  padding: var(--space_5);
+}
+
+.card_title {
+  font-size: 16px;
+  margin-bottom: var(--space_2);
+}
+
+.card_helper {
+  font-size: 13px;
+  color: var(--fg_muted);
+  margin-bottom: var(--space_4);
+  line-height: 1.5;
+}

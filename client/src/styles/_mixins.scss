@@ -1,0 +1,26 @@
+@use 'tokens' as t;
+
+@mixin focus_ring {
+  outline: none;
+  &:focus-visible {
+    box-shadow: 0 0 0 2px t.$bg, 0 0 0 4px t.$accent;
+  }
+}
+
+@mixin mono_text {
+  font-family: t.$font_mono;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+@mixin truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@mixin sm_up {
+  @media (min-width: t.$bp_sm) {
+    @content;
+  }
+}

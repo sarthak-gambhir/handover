@@ -1,0 +1,91 @@
+@use '../styles/mixins' as m;
+
+.file_row {
+  display: flex;
+  align-items: center;
+  gap: var(--space_3);
+  padding: var(--space_3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius_md);
+  background: var(--bg_elevated);
+  transition: background var(--duration_med) var(--ease_out);
+}
+
+.file_row_just_added {
+  background: var(--accent_soft);
+}
+
+.file_row_icon {
+  color: var(--fg_subtle);
+  flex-shrink: 0;
+}
+
+.file_row_main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_1);
+}
+
+.file_row_name {
+  @include m.truncate;
+  font-size: 14px;
+  color: var(--fg);
+}
+
+.file_row_meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space_2);
+  font-size: 12px;
+  color: var(--fg_muted);
+}
+
+.file_row_size {
+  @include m.mono_text;
+}
+
+.file_row_time {
+  color: var(--fg_subtle);
+}
+
+.file_row_progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bg_overlay);
+  overflow: hidden;
+  margin-top: var(--space_1);
+}
+
+.file_row_progress_bar {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--duration_fast) linear;
+}
+
+.file_row_actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space_1);
+  flex-shrink: 0;
+}
+
+.file_row_download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius_md);
+  color: var(--fg_muted);
+  transition:
+    background var(--duration_fast) var(--ease_out),
+    color var(--duration_fast) var(--ease_out);
+  @include m.focus_ring;
+
+  &:hover {
+    background: var(--bg_overlay);
+    color: var(--fg);
+  }
+}

@@ -1,0 +1,81 @@
+@use '../styles/mixins' as m;
+
+.member_row {
+  display: flex;
+  align-items: center;
+  gap: var(--space_2);
+  padding: var(--space_2) var(--space_3);
+  border-radius: var(--radius_md);
+  transition: background var(--duration_fast) var(--ease_out);
+
+  &:hover {
+    background: var(--bg_overlay);
+  }
+}
+
+.member_row_identity {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space_1);
+  min-width: 0;
+  flex: 1;
+}
+
+.member_row_name {
+  @include m.truncate;
+  font-size: 14px;
+  color: var(--fg);
+}
+
+.member_row_tag {
+  @include m.mono_text;
+  font-size: 11px;
+  color: var(--fg_subtle);
+  flex-shrink: 0;
+}
+
+.member_row_badges {
+  display: flex;
+  gap: var(--space_1);
+}
+
+.member_row_actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space_1);
+}
+
+.member_row_menu_wrap {
+  position: relative;
+}
+
+.member_row_menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  min-width: 140px;
+  background: var(--bg_overlay);
+  border: 1px solid var(--border_strong);
+  border-radius: var(--radius_md);
+  padding: var(--space_1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.member_row_menu_item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space_2) var(--space_3);
+  border-radius: var(--radius_sm);
+  font-size: 13px;
+  color: var(--fg);
+
+  &:hover {
+    background: var(--bg_elevated);
+  }
+}
+
+.member_row_menu_danger {
+  color: var(--danger);
+}
