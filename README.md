@@ -23,10 +23,10 @@ Open the client, click **Create new session**, share the slug, and have a second
 
 - **Sessions** are identified by a human-readable slug (e.g. `purple-otter-77`) and exist only in server memory.
 - **Auth** is cookie-based: each session sets an HttpOnly, Secure, SameSite=Strict `st_<slug>` cookie scoped to `/api`. There are no passwords and no tokens in JS-readable storage. The cookie is refreshed on every authenticated request (sliding window).
-- **Admission**: non-owners knock with a display name and wait. The owner admits or rejects from the knock queue, and can pause new knocks.
-- **Shared bucket**: files uploaded here pass through the server, are held in memory (subject to caps), and are visible to all members. Uploaders can delete their own files; kicked members’ files are auto-removed.
+- **Admission**: the owner enters a display name when creating a session; non-owners knock with a display name and wait. The owner admits or rejects from the knock queue, and can pause new knocks.
+- **Shared bucket**: files uploaded here pass through the server, are held in memory (subject to caps), and are visible to all members. Uploaders can delete their own files, and the **owner can delete any file**. When a member leaves, their uploads are **kept** (orphaned) so others don't lose shared content; the owner can remove a single member's uploads, or clear all orphaned files at once. Kicked members' files are still auto-removed.
 - **Direct send (P2P)**: a member sends files straight to another member over an encrypted WebRTC data channel. The server only relays SDP/ICE signaling and never sees file bytes. Transfers use a manifest + framed-chunk protocol with backpressure, and stream to disk via the File System Access API where available.
-- **Cleanup**: a sweeper expires idle sessions (60 min), un-admitted knocks (5 min), gives a disconnected owner a 60 s grace period, and cancels in-flight transfers when a peer leaves.
+- **Cleanup**: a sweeper expires idle sessions (60 min), un-admitted knocks (5 min), gives a disconnected owner a 60 s grace period, and cancels in-flight transfers when a peer leaves. Leaving with files in the bucket prompts you to delete them or keep them for the others.
 
 ## Scripts
 
@@ -93,7 +93,7 @@ All server config is optional and has defaults (see `server/.env.example`).
 
 ### Session lifecycle
 
-- [ ] Create a session; the owner lands in the session view with a slug and an empty bucket.
+- [ ] Create a session; you must enter your name first, then land in the session view with a slug and an empty bucket. Other members see you by that name.
 - [ ] Knock from a second browser; the owner sees it in the knock queue.
 - [ ] Admit the knocker; they move from the waiting room into the session.
 - [ ] Reject a knocker; they’re returned to home with a message.
@@ -105,12 +105,17 @@ All server config is optional and has defaults (see `server/.env.example`).
 
 - [ ] Upload a file; it appears for all members with a progress bar, then a flash highlight.
 - [ ] Download a file from another member.
-- [ ] Delete your own file; others see it disappear. You cannot delete someone else’s file.
+- [ ] Delete your own file; others see it disappear. A non-owner cannot delete someone else’s file.
 - [ ] Exceed the per-session/global cap; the upload fails with a capacity message.
+- [ ] A member uploads a file then leaves; the file stays in the bucket (now attributed to a former member).
 
 ### Owner controls
 
 - [ ] Kick a member; they’re removed immediately and their uploaded files vanish for everyone.
+- [ ] As owner, delete a file uploaded by someone else; it disappears for everyone.
+- [ ] As owner, use a member’s menu → “Delete all uploads”; all of that member’s files are removed.
+- [ ] After a member leaves with files, the owner sees “Delete orphaned (N)”; clicking it clears the left-behind files.
+- [ ] Leave as a non-owner with files in the bucket; you’re prompted to delete them or keep them. “Keep & leave” leaves them as orphaned.
 - [ ] Transfer ownership; the target must accept, then badges/controls update for both.
 - [ ] Decline an ownership offer; the original owner is notified.
 

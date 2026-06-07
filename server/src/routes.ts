@@ -4,9 +4,9 @@ import { rateLimit } from 'express-rate-limit';
 import { config } from './config.js';
 import { store } from './sessions.js';
 import { normalizeSlug } from './slug.js';
-import { knockBodySchema } from './validation.js';
+import { knockBodySchema, createSessionBodySchema } from './validation.js';
 import { sanitizeFilename } from './lib/sanitize_filename.js';
-import { requireMember, setSessionCookie, clearSessionCookie } from './auth.js';
+import { requireMember, requireOwner, setSessionCookie, clearSessionCookie } from './auth.js';
 import { emitToSession, emitToOwner } from './realtime.js';
 import { iceServers } from './ice.js';
 import type { Session } from './types.js';
@@ -93,8 +93,13 @@ router.param('slug', (req, _res, next, slug: string) => {
 
 // ---- POST /api/sessions --------------------------------------------------
 
-router.post('/sessions', createLimiter, (_req: Request, res: Response) => {
-  const { session, ownerToken, ownerUserId } = store.createSession();
+router.post('/sessions', createLimiter, (req: Request, res: Response) => {
+  const parsed = createSessionBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_display_name' });
+    return;
+  }
+  const { session, ownerToken, ownerUserId } = store.createSession(parsed.data.display_name);
   setSessionCookie(res, session.slug, ownerToken, config.memberCookieMaxAgeS);
   res.status(201).json({ slug: session.slug, owner_user_id: ownerUserId });
 });
@@ -263,7 +268,9 @@ router.delete('/sessions/:slug/files/:id', requireMember, (req: Request, res: Re
     res.status(404).json({ error: 'file_not_found' });
     return;
   }
-  if (entry.uploader_id !== req.user_id) {
+  // The uploader can always delete their own file; the owner can delete any
+  // file (including files orphaned by members who have left).
+  if (entry.uploader_id !== req.user_id && !req.member?.is_owner) {
     res.status(403).json({ error: 'not_uploader' });
     return;
   }
@@ -271,6 +278,28 @@ router.delete('/sessions/:slug/files/:id', requireMember, (req: Request, res: Re
   emitToSession(session.slug, 'file:removed', { id: req.params.id });
   res.status(204).end();
 });
+
+// ---- DELETE /api/sessions/:slug/orphaned-files (owner) -------------------
+
+router.delete('/sessions/:slug/orphaned-files', requireOwner, (req: Request, res: Response) => {
+  const session = req.session!;
+  const ids = store.removeOrphanedFiles(session);
+  for (const id of ids) emitToSession(session.slug, 'file:removed', { id });
+  res.json({ removed: ids.length });
+});
+
+// ---- DELETE /api/sessions/:slug/members/:userId/files (owner) ------------
+
+router.delete(
+  '/sessions/:slug/members/:userId/files',
+  requireOwner,
+  (req: Request, res: Response) => {
+    const session = req.session!;
+    const ids = store.removeFilesByUploader(session, req.params.userId);
+    for (const id of ids) emitToSession(session.slug, 'file:removed', { id });
+    res.json({ removed: ids.length });
+  },
+);
 
 // ---- GET /api/turn -------------------------------------------------------
 

@@ -114,6 +114,18 @@
   margin-top: var(--space_2);
 }
 
+.session_bucket_head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space_3);
+  flex-wrap: wrap;
+
+  .session_section_title {
+    margin-bottom: 0;
+  }
+}
+
 .session_member_list,
 .session_transfer_list,
 .session_file_list {

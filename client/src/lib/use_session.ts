@@ -400,6 +400,25 @@ export function useSession(slug: string) {
     (paused: boolean) => socketRef.current?.emit('knocking:set_paused', { paused }),
     [],
   );
+  const deleteOrphanedFiles = useCallback(async () => {
+    try {
+      const { removed } = await api.deleteOrphanedFiles(slug);
+      if (removed === 0) toast('No orphaned files to remove.', 'info');
+      else toast(`Removed ${removed} orphaned file${removed === 1 ? '' : 's'}.`, 'success');
+    } catch {
+      toast('Could not remove orphaned files.', 'danger');
+    }
+  }, [slug, toast]);
+  const deleteMemberFiles = useCallback(
+    async (user_id: string) => {
+      try {
+        await api.deleteMemberFiles(slug, user_id);
+      } catch {
+        toast('Could not remove that member’s files.', 'danger');
+      }
+    },
+    [slug, toast],
+  );
   const acceptOwnership = useCallback(() => {
     socketRef.current?.emit('owner_accept');
     setOwnerOffer(null);
@@ -429,6 +448,11 @@ export function useSession(slug: string) {
       }),
     [],
   );
+
+  const deleteOwnUploads = useCallback(async () => {
+    const mine = bucket.filter((e) => e.uploader_id === yourUserId).map((e) => e.id);
+    await Promise.allSettled(mine.map((id) => api.deleteFile(slug, id)));
+  }, [bucket, yourUserId, slug]);
 
   const hasActiveWork =
     uploads.length > 0 || transfers.some((t) => !isTerminal(t.status));
@@ -464,6 +488,9 @@ export function useSession(slug: string) {
     kick,
     makeOwner,
     setPaused,
+    deleteOrphanedFiles,
+    deleteMemberFiles,
+    deleteOwnUploads,
     acceptOwnership,
     declineOwnership,
     leave,

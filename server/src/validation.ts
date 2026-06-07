@@ -28,3 +28,9 @@ export const knockBodySchema = z.object({
 });
 
 export type KnockBody = z.infer<typeof knockBodySchema>;
+
+export const createSessionBodySchema = z.object({
+  display_name: displayNameSchema,
+});
+
+export type CreateSessionBody = z.infer<typeof createSessionBodySchema>;

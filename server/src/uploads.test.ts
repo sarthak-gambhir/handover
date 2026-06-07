@@ -45,14 +45,22 @@ function cookieHeader(slug: string, token: string): string {
 }
 
 describe('POST /api/sessions', () => {
-  it('creates a session, returns the slug + owner id, and sets a member cookie', async () => {
-    const res = await request(server).post('/api/sessions');
+  it('creates a session with the owner name, returns ids, and sets a member cookie', async () => {
+    const res = await request(server).post('/api/sessions').send({ display_name: 'Captain' });
     expect(res.status).toBe(201);
     expect(typeof res.body.slug).toBe('string');
     expect(typeof res.body.owner_user_id).toBe('string');
-    expect(store.sessions.has(res.body.slug)).toBe(true);
+    const session = store.getSession(res.body.slug)!;
+    expect(session.members.get(res.body.owner_user_id)?.display_name).toBe('Captain');
     const setCookie = res.headers['set-cookie'] as unknown as string[] | undefined;
     expect(setCookie?.some((c) => c.startsWith(`${cookieName(res.body.slug)}=`))).toBe(true);
+  });
+
+  it('400 when the owner name is missing or invalid', async () => {
+    const res = await request(server).post('/api/sessions').send({});
+    expect(res.status).toBe(400);
+    const bidi = await request(server).post('/api/sessions').send({ display_name: 'x\u202Ey' });
+    expect(bidi.status).toBe(400);
   });
 });
 
@@ -152,7 +160,7 @@ describe('DELETE /api/sessions/:slug/files/:id', () => {
     expect(session.total_bytes).toBe(0);
   });
 
-  it('403 when a non-uploader tries to delete', async () => {
+  it('403 when a non-uploader non-owner tries to delete', async () => {
     const { slug, token, session } = newOwnerSession();
     const up = await request(server)
       .post(`/api/sessions/${slug}/files`)
@@ -167,6 +175,95 @@ describe('DELETE /api/sessions/:slug/files/:id', () => {
       .set('Cookie', cookieHeader(slug, other.session_token));
     expect(del.status).toBe(403);
     expect(session.bucket.size).toBe(1);
+  });
+
+  it('the owner can delete a file uploaded by another member', async () => {
+    const { slug, token, session } = newOwnerSession();
+    const other = store.admitKnocker(
+      session,
+      store.addKnocker(session, 'Other').knocker.knock_id,
+    )!;
+    const up = await request(server)
+      .post(`/api/sessions/${slug}/files`)
+      .set('Cookie', cookieHeader(slug, other.session_token))
+      .attach('file', Buffer.from('owned by other'), 'o.txt');
+    expect(session.bucket.size).toBe(1);
+    const del = await request(server)
+      .delete(`/api/sessions/${slug}/files/${up.body.id}`)
+      .set('Cookie', cookieHeader(slug, token));
+    expect(del.status).toBe(204);
+    expect(session.bucket.size).toBe(0);
+    expect(session.total_bytes).toBe(0);
+  });
+});
+
+describe('owner bulk file deletion', () => {
+  it('DELETE /orphaned-files removes files whose uploader has left', async () => {
+    const { slug, token, session } = newOwnerSession();
+    const other = store.admitKnocker(
+      session,
+      store.addKnocker(session, 'Other').knocker.knock_id,
+    )!;
+    // Owner keeps a file; the other member uploads two, then leaves (kept).
+    await request(server)
+      .post(`/api/sessions/${slug}/files`)
+      .set('Cookie', cookieHeader(slug, token))
+      .attach('file', Buffer.from('owner file'), 'owner.txt');
+    await request(server)
+      .post(`/api/sessions/${slug}/files`)
+      .set('Cookie', cookieHeader(slug, other.session_token))
+      .attach('file', Buffer.from('orphan one'), 'one.txt');
+    await request(server)
+      .post(`/api/sessions/${slug}/files`)
+      .set('Cookie', cookieHeader(slug, other.session_token))
+      .attach('file', Buffer.from('orphan two'), 'two.txt');
+    expect(session.bucket.size).toBe(3);
+    // The member leaves without purging files.
+    store.removeMember(session, other.user_id, false);
+    expect(session.bucket.size).toBe(3);
+
+    const del = await request(server)
+      .delete(`/api/sessions/${slug}/orphaned-files`)
+      .set('Cookie', cookieHeader(slug, token));
+    expect(del.status).toBe(200);
+    expect(del.body.removed).toBe(2);
+    expect(session.bucket.size).toBe(1);
+  });
+
+  it('DELETE /members/:userId/files removes one member\u2019s uploads', async () => {
+    const { slug, token, session } = newOwnerSession();
+    const other = store.admitKnocker(
+      session,
+      store.addKnocker(session, 'Other').knocker.knock_id,
+    )!;
+    await request(server)
+      .post(`/api/sessions/${slug}/files`)
+      .set('Cookie', cookieHeader(slug, other.session_token))
+      .attach('file', Buffer.from('member file'), 'm.txt');
+    await request(server)
+      .post(`/api/sessions/${slug}/files`)
+      .set('Cookie', cookieHeader(slug, token))
+      .attach('file', Buffer.from('owner file'), 'o.txt');
+    expect(session.bucket.size).toBe(2);
+
+    const del = await request(server)
+      .delete(`/api/sessions/${slug}/members/${other.user_id}/files`)
+      .set('Cookie', cookieHeader(slug, token));
+    expect(del.status).toBe(200);
+    expect(del.body.removed).toBe(1);
+    expect(session.bucket.size).toBe(1);
+  });
+
+  it('403 when a non-owner calls a bulk delete route', async () => {
+    const { slug, session } = newOwnerSession();
+    const other = store.admitKnocker(
+      session,
+      store.addKnocker(session, 'Other').knocker.knock_id,
+    )!;
+    const del = await request(server)
+      .delete(`/api/sessions/${slug}/orphaned-files`)
+      .set('Cookie', cookieHeader(slug, other.session_token));
+    expect(del.status).toBe(403);
   });
 });
 

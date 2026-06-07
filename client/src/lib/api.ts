@@ -56,8 +56,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  createSession() {
-    return request<{ slug: string; owner_user_id: string }>('/api/sessions', { method: 'POST' });
+  createSession(display_name: string) {
+    return request<{ slug: string; owner_user_id: string }>('/api/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ display_name }),
+    });
   },
 
   knock(slug: string, display_name: string) {
@@ -80,6 +83,19 @@ export const api = {
 
   deleteFile(slug: string, id: string) {
     return request<void>(`/api/sessions/${normalizeSlug(slug)}/files/${id}`, { method: 'DELETE' });
+  },
+
+  deleteOrphanedFiles(slug: string) {
+    return request<{ removed: number }>(`/api/sessions/${normalizeSlug(slug)}/orphaned-files`, {
+      method: 'DELETE',
+    });
+  },
+
+  deleteMemberFiles(slug: string, user_id: string) {
+    return request<{ removed: number }>(
+      `/api/sessions/${normalizeSlug(slug)}/members/${encodeURIComponent(user_id)}/files`,
+      { method: 'DELETE' },
+    );
   },
 
   turn(slug: string) {

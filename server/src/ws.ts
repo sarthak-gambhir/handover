@@ -690,7 +690,9 @@ function handleLeave(io: Server, socket: AppSocket, ack?: () => void): void {
     return;
   }
   cancelPeerTransfers(io, session, data.user_id);
-  store.removeMember(session, data.user_id);
+  // Keep the leaver's uploaded files in the bucket (orphaned); the owner can
+  // remove them later. Their token is still revoked so access ends immediately.
+  store.removeMember(session, data.user_id, false);
   forgetTransferRate(data.user_id);
   io.to(room(session.slug)).emit('member:left', { user_id: data.user_id });
   broadcastMembers(io, session);

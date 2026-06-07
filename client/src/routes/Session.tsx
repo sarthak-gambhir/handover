@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { FaCopy, FaRightFromBracket, FaFileLines, FaUsers, FaLock, FaLockOpen } from 'react-icons/fa6';
+import { FaCopy, FaRightFromBracket, FaFileLines, FaUsers, FaLock, FaLockOpen, FaTrashCan } from 'react-icons/fa6';
 import { useSession } from '../lib/use_session';
 import { useToast } from '../components/ui/Toast';
 import { Button } from '../components/ui/Button';
@@ -31,6 +31,13 @@ export function Session() {
   const [sendTarget, setSendTarget] = useState<PublicMember | null>(null);
   const [kickTarget, setKickTarget] = useState<PublicMember | null>(null);
   const [makeOwnerTarget, setMakeOwnerTarget] = useState<PublicMember | null>(null);
+  const [deleteUploadsTarget, setDeleteUploadsTarget] = useState<PublicMember | null>(null);
+  const [confirmOrphaned, setConfirmOrphaned] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+
+  const memberIds = new Set(s.members.map((m) => m.user_id));
+  const orphanedCount = s.bucket.filter((e) => !memberIds.has(e.uploader_id)).length;
+  const ownUploadCount = s.bucket.filter((e) => e.uploader_id === s.yourUserId).length;
 
   // Warn before leaving with active work.
   useEffect(() => {
@@ -54,10 +61,20 @@ export function Session() {
     }
   }
 
-  async function onLeave() {
+  async function performLeave() {
     await s.leave();
     sessionStore.reset();
     navigate('/');
+  }
+
+  async function onLeave() {
+    // A non-owner who has uploads is asked whether to delete them first; the
+    // owner leaving ends the whole session, so there's nothing to orphan.
+    if (!s.isOwner && ownUploadCount > 0) {
+      setConfirmLeave(true);
+      return;
+    }
+    await performLeave();
   }
 
   if (s.status === 'fatal') {
@@ -150,6 +167,7 @@ export function Session() {
                 onSend={setSendTarget}
                 onKick={setKickTarget}
                 onMakeOwner={setMakeOwnerTarget}
+                onDeleteUploads={setDeleteUploadsTarget}
               />
             ))}
           </ul>
@@ -172,9 +190,21 @@ export function Session() {
         </aside>
 
         <section className="session_bucket">
-          <h2 className="session_section_title">
-            <FaFileLines size={16} /> Shared bucket
-          </h2>
+          <div className="session_bucket_head">
+            <h2 className="session_section_title">
+              <FaFileLines size={16} /> Shared bucket
+            </h2>
+            {s.isOwner && orphanedCount > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<FaTrashCan size={16} />}
+                onClick={() => setConfirmOrphaned(true)}
+              >
+                Delete orphaned ({orphanedCount})
+              </Button>
+            )}
+          </div>
           <UploadDropzone onFiles={s.uploadFiles} />
 
           {s.bucket.length === 0 && s.uploads.length === 0 ? (
@@ -204,6 +234,7 @@ export function Session() {
                   entry={e}
                   uploaderName={s.nameOf(e.uploader_id)}
                   isYours={e.uploader_id === s.yourUserId}
+                  canDelete={e.uploader_id === s.yourUserId || s.isOwner}
                   justAdded={s.justAdded.has(e.id)}
                   downloadUrl={api.downloadUrl(cleanSlug, e.id)}
                   onDelete={s.deleteFile}
@@ -283,6 +314,89 @@ export function Session() {
         }
       >
         {s.ownerOffer && <>{s.nameOf(s.ownerOffer.from_user_id)} wants to transfer ownership to you.</>}
+      </Modal>
+
+      <Modal
+        open={!!deleteUploadsTarget}
+        onClose={() => setDeleteUploadsTarget(null)}
+        title={`Delete all of ${deleteUploadsTarget?.display_name}’s uploads?`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDeleteUploadsTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (deleteUploadsTarget) s.deleteMemberFiles(deleteUploadsTarget.user_id);
+                setDeleteUploadsTarget(null);
+              }}
+            >
+              Delete files
+            </Button>
+          </>
+        }
+      >
+        Every file this member uploaded will be removed from the bucket for everyone.
+      </Modal>
+
+      <Modal
+        open={confirmOrphaned}
+        onClose={() => setConfirmOrphaned(false)}
+        title="Delete orphaned files?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmOrphaned(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                s.deleteOrphanedFiles();
+                setConfirmOrphaned(false);
+              }}
+            >
+              Delete {orphanedCount} file{orphanedCount === 1 ? '' : 's'}
+            </Button>
+          </>
+        }
+      >
+        This removes every file whose uploader has left the session.
+      </Modal>
+
+      <Modal
+        open={confirmLeave}
+        onClose={() => setConfirmLeave(false)}
+        title="Leave the session?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmLeave(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                setConfirmLeave(false);
+                await performLeave();
+              }}
+            >
+              Keep files & leave
+            </Button>
+            <Button
+              variant="danger"
+              onClick={async () => {
+                setConfirmLeave(false);
+                await s.deleteOwnUploads();
+                await performLeave();
+              }}
+            >
+              Delete my files & leave
+            </Button>
+          </>
+        }
+      >
+        You have {ownUploadCount} file{ownUploadCount === 1 ? '' : 's'} in the shared bucket. If you keep
+        them, they’ll stay for the others until the owner removes them.
       </Modal>
     </div>
   );

@@ -15,6 +15,7 @@ interface MemberRowProps {
   onSend: (member: PublicMember) => void;
   onKick: (member: PublicMember) => void;
   onMakeOwner: (member: PublicMember) => void;
+  onDeleteUploads: (member: PublicMember) => void;
 }
 
 export function MemberRow({
@@ -24,6 +25,7 @@ export function MemberRow({
   onSend,
   onKick,
   onMakeOwner,
+  onDeleteUploads,
 }: MemberRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
@@ -94,6 +96,16 @@ export function MemberRow({
                   }}
                 >
                   Make owner
+                </button>
+                <button
+                  className="member_row_menu_item"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onDeleteUploads(member);
+                  }}
+                >
+                  Delete all uploads
                 </button>
                 <button
                   className="member_row_menu_item member_row_menu_danger"

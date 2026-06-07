@@ -19,20 +19,29 @@ export function Home() {
   const [knocking, setKnocking] = useState(false);
   const [slug, setSlug] = useState(params.get('slug') ?? '');
   const [name, setName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
 
-  async function onCreate() {
+  async function onCreate(e: FormEvent) {
+    e.preventDefault();
+    const cleanOwnerName = ownerName.trim();
+    if (!cleanOwnerName) {
+      toast('Enter your name to create a session.', 'warn');
+      return;
+    }
     setCreating(true);
     try {
-      const { slug: newSlug, owner_user_id } = await api.createSession();
+      const { slug: newSlug, owner_user_id } = await api.createSession(cleanOwnerName);
       sessionStore.set({
         slug: newSlug,
         user_id: owner_user_id,
         is_owner: true,
-        display_name: 'You',
+        display_name: cleanOwnerName,
       });
       navigate(sessionPath(newSlug));
-    } catch {
-      toast('Could not create a session. Try again.', 'danger');
+    } catch (err) {
+      const code = err instanceof ApiError ? err.code : 'error';
+      if (code === 'invalid_display_name') toast('That name is not allowed.', 'warn');
+      else toast('Could not create a session. Try again.', 'danger');
       setCreating(false);
     }
   }
@@ -82,9 +91,24 @@ export function Home() {
 
       <div className="home_cards">
         <Card title="Create a session" helper="You become the owner and admit others by approving their knock.">
-          <Button onClick={onCreate} loading={creating} icon={<FaPlus size={18} />}>
-            Create new session
-          </Button>
+          <form className="home_create_form" onSubmit={onCreate}>
+            <Input
+              label="Your name"
+              placeholder="Alex"
+              value={ownerName}
+              onChange={(e) => setOwnerName(e.target.value)}
+              maxLength={32}
+              autoComplete="off"
+            />
+            <Button
+              type="submit"
+              loading={creating}
+              disabled={!ownerName.trim()}
+              icon={<FaPlus size={18} />}
+            >
+              Create new session
+            </Button>
+          </form>
         </Card>
 
         <Card title="Join a session" helper="Enter the session ID someone shared with you and knock to request entry.">
@@ -105,7 +129,13 @@ export function Home() {
               maxLength={32}
               autoComplete="off"
             />
-            <Button type="submit" variant="secondary" loading={knocking} icon={<FaDoorOpen size={18} />}>
+            <Button
+              type="submit"
+              variant="secondary"
+              loading={knocking}
+              disabled={!slug.trim() || !name.trim()}
+              icon={<FaDoorOpen size={18} />}
+            >
               Knock
             </Button>
           </form>

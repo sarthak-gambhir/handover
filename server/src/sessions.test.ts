@@ -48,6 +48,67 @@ describe('Store — session + knocker lifecycle', () => {
     expect(store.lookupToken(member.session_token)).toBeUndefined();
     expect(session.total_bytes).toBe(0);
   });
+
+  it('removeMember with purgeFiles=false keeps the leaver\u2019s files (orphaned)', () => {
+    const { store, session } = freshMemberSession();
+    const member = store.admitKnocker(session, store.addKnocker(session, 'Bob').knocker.knock_id)!;
+    store.reserveBytes(session, 10);
+    store.addBucketEntry(session, {
+      name: 'f.txt',
+      size: 10,
+      content_type: 'text/plain',
+      data: Buffer.alloc(10),
+      uploader_id: member.user_id,
+    });
+    store.removeMember(session, member.user_id, false);
+    expect(session.members.has(member.user_id)).toBe(false);
+    expect(store.lookupToken(member.session_token)).toBeUndefined();
+    // File is retained even though its uploader is gone.
+    expect(session.bucket.size).toBe(1);
+    expect(session.total_bytes).toBe(10);
+  });
+
+  it('removeOrphanedFiles drops only files whose uploader is no longer a member', () => {
+    const { store, session, ownerUserId } = freshMemberSession();
+    const member = store.admitKnocker(session, store.addKnocker(session, 'Bob').knocker.knock_id)!;
+    store.reserveBytes(session, 30);
+    store.addBucketEntry(session, {
+      name: 'owner.txt', size: 10, content_type: 'text/plain',
+      data: Buffer.alloc(10), uploader_id: ownerUserId,
+    });
+    store.addBucketEntry(session, {
+      name: 'm1.txt', size: 10, content_type: 'text/plain',
+      data: Buffer.alloc(10), uploader_id: member.user_id,
+    });
+    store.addBucketEntry(session, {
+      name: 'm2.txt', size: 10, content_type: 'text/plain',
+      data: Buffer.alloc(10), uploader_id: member.user_id,
+    });
+    store.removeMember(session, member.user_id, false);
+
+    const removed = store.removeOrphanedFiles(session);
+    expect(removed).toHaveLength(2);
+    expect(session.bucket.size).toBe(1);
+    expect(session.total_bytes).toBe(10);
+  });
+
+  it('removeFilesByUploader removes exactly one member\u2019s uploads', () => {
+    const { store, session, ownerUserId } = freshMemberSession();
+    const member = store.admitKnocker(session, store.addKnocker(session, 'Bob').knocker.knock_id)!;
+    store.reserveBytes(session, 20);
+    store.addBucketEntry(session, {
+      name: 'owner.txt', size: 10, content_type: 'text/plain',
+      data: Buffer.alloc(10), uploader_id: ownerUserId,
+    });
+    store.addBucketEntry(session, {
+      name: 'm.txt', size: 10, content_type: 'text/plain',
+      data: Buffer.alloc(10), uploader_id: member.user_id,
+    });
+    const removed = store.removeFilesByUploader(session, member.user_id);
+    expect(removed).toHaveLength(1);
+    expect(session.bucket.size).toBe(1);
+    expect(session.total_bytes).toBe(10);
+  });
 });
 
 describe('Store — byte reservation', () => {

@@ -48,7 +48,8 @@
   }
 }
 
-.home_join_form {
+.home_join_form,
+.home_create_form {
   display: flex;
   flex-direction: column;
   gap: var(--space_3);

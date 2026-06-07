@@ -48,7 +48,7 @@ export class Store extends EventEmitter {
 
   // ---- session lifecycle -------------------------------------------------
 
-  createSession(): { session: Session; ownerToken: string; ownerUserId: string } {
+  createSession(displayName = 'Owner'): { session: Session; ownerToken: string; ownerUserId: string } {
     const slug = makeUniqueSlug((s) => this.sessions.has(s));
     const ownerUserId = randomUUID();
     const ownerToken = newToken();
@@ -56,7 +56,7 @@ export class Store extends EventEmitter {
 
     const owner: Member = {
       user_id: ownerUserId,
-      display_name: 'Owner',
+      display_name: displayName,
       session_token: ownerToken,
       tab_id: null,
       socket_id: null,
@@ -177,15 +177,19 @@ export class Store extends EventEmitter {
 
   // ---- members -----------------------------------------------------------
 
-  removeMember(session: Session, user_id: string): Member | undefined {
+  removeMember(session: Session, user_id: string, purgeFiles = true): Member | undefined {
     const member = session.members.get(user_id);
     if (!member) return undefined;
     if (member.offline_grace_timer) clearTimeout(member.offline_grace_timer);
     session.members.delete(user_id);
     this.tokens.delete(member.session_token);
-    // Free this member's bucket bytes.
-    for (const [id, entry] of session.bucket) {
-      if (entry.uploader_id === user_id) this.removeBucketEntry(session, id);
+    // Optionally free this member's bucket bytes. When a member leaves cleanly
+    // their files are intentionally kept (orphaned) for the owner to manage;
+    // on kick they are purged.
+    if (purgeFiles) {
+      for (const [id, entry] of session.bucket) {
+        if (entry.uploader_id === user_id) this.removeBucketEntry(session, id);
+      }
     }
     // Drop any ownership offer that involves the departing member.
     if (
@@ -270,6 +274,26 @@ export class Store extends EventEmitter {
     this.releaseBytes(session, entry.size);
     this.touch(session);
     return entry;
+  }
+
+  /** Remove and return the ids of every file uploaded by `user_id`. */
+  removeFilesByUploader(session: Session, user_id: string): string[] {
+    const ids: string[] = [];
+    for (const [id, entry] of session.bucket) {
+      if (entry.uploader_id === user_id) ids.push(id);
+    }
+    for (const id of ids) this.removeBucketEntry(session, id);
+    return ids;
+  }
+
+  /** Remove and return the ids of files whose uploader is no longer a member. */
+  removeOrphanedFiles(session: Session): string[] {
+    const ids: string[] = [];
+    for (const [id, entry] of session.bucket) {
+      if (!session.members.has(entry.uploader_id)) ids.push(id);
+    }
+    for (const id of ids) this.removeBucketEntry(session, id);
+    return ids;
   }
 
   // ---- transfers ---------------------------------------------------------

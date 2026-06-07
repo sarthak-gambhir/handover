@@ -13,6 +13,9 @@ interface FileRowProps {
   justAdded: boolean;
   downloadUrl: string;
   onDelete: (id: string) => void;
+  // Whether the current viewer may delete this file. Defaults to isYours; the
+  // owner can delete any file (including orphaned ones).
+  canDelete?: boolean;
   progress?: number; // 0..1 while uploading; undefined when stored
   onCancelUpload?: () => void;
 }
@@ -24,9 +27,11 @@ export function FileRow({
   justAdded,
   downloadUrl,
   onDelete,
+  canDelete,
   progress,
   onCancelUpload,
 }: FileRowProps) {
+  const showDelete = canDelete ?? isYours;
   const uploading = progress !== undefined;
   return (
     <li className={cx('file_row', justAdded && 'file_row_just_added')}>
@@ -68,7 +73,7 @@ export function FileRow({
             >
               <FaDownload size={16} />
             </a>
-            {isYours && (
+            {showDelete && (
               <Button
                 size="sm"
                 variant="ghost"
