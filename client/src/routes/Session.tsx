@@ -1,70 +1,109 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { FaCopy, FaRightFromBracket, FaFileLines, FaUsers, FaLock, FaLockOpen, FaTrashCan } from 'react-icons/fa6';
-import { useSession } from '../lib/use_session';
-import { useToast } from '../components/ui/Toast';
-import { Button } from '../components/ui/Button';
-import { Card } from '../components/ui/Card';
-import { Badge } from '../components/ui/Badge';
-import { Modal } from '../components/ui/Modal';
-import { EmptyState } from '../components/ui/EmptyState';
-import { Skeleton } from '../components/ui/Skeleton';
-import { MemberRow } from '../components/MemberRow';
-import { FileRow } from '../components/FileRow';
-import { UploadDropzone } from '../components/UploadDropzone';
-import { KnockQueueItem } from '../components/KnockQueueItem';
-import { SendFileModal } from '../components/SendFileModal';
-import { IncomingTransferModal } from '../components/IncomingTransferModal';
-import { TransferProgressRow } from '../components/TransferProgressRow';
-import { sessionStore } from '../lib/sessionStore';
-import { normalizeSlug, sessionPath } from '../lib/slug';
-import { api } from '../lib/api';
-import type { PublicMember } from '../lib/api';
-import './Session.scss';
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  RiFileCopyLine,
+  RiShareForwardLine,
+  RiUserAddLine,
+  RiMore2Fill,
+  RiLogoutBoxRLine,
+  RiFolder3Line,
+  RiGroupLine,
+  RiExchangeLine,
+  RiLockLine,
+  RiLockUnlockLine,
+  RiDeleteBin6Line,
+  RiWifiOffLine,
+  RiErrorWarningLine,
+} from "react-icons/ri";
+import { useSession } from "../lib/use_session";
+import { useToast } from "../components/ui/Toast";
+import { Page } from "../components/ui/Page";
+import { Panel } from "../components/ui/Panel";
+import { Popover } from "../components/ui/Popover";
+import { Tabs } from "../components/ui/Tabs";
+import { PresenceStack } from "../components/ui/PresenceStack";
+import { StateScreen } from "../components/ui/StateScreen";
+import { Button } from "../components/ui/Button";
+import { Badge } from "../components/ui/Badge";
+import { Modal } from "../components/ui/Modal";
+import { Skeleton } from "../components/ui/Skeleton";
+import { MemberRow } from "../components/MemberRow";
+import { FileRow } from "../components/FileRow";
+import { UploadDropzone } from "../components/UploadDropzone";
+import { KnockQueueItem } from "../components/KnockQueueItem";
+import { SendFileModal } from "../components/SendFileModal";
+import { IncomingTransferModal } from "../components/IncomingTransferModal";
+import { TransferProgressRow } from "../components/TransferProgressRow";
+import { sessionStore } from "../lib/sessionStore";
+import { normalizeSlug, sessionPath } from "../lib/slug";
+import { api } from "../lib/api";
+import type { PublicMember } from "../lib/api";
+import "./Session.scss";
+
+type SessionTab = "files" | "people" | "activity";
 
 export function Session() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { slug = '' } = useParams();
+  const { slug = "" } = useParams();
   const cleanSlug = normalizeSlug(slug);
   const s = useSession(cleanSlug);
   const [sendTarget, setSendTarget] = useState<PublicMember | null>(null);
   const [kickTarget, setKickTarget] = useState<PublicMember | null>(null);
-  const [makeOwnerTarget, setMakeOwnerTarget] = useState<PublicMember | null>(null);
-  const [deleteUploadsTarget, setDeleteUploadsTarget] = useState<PublicMember | null>(null);
+  const [makeOwnerTarget, setMakeOwnerTarget] = useState<PublicMember | null>(
+    null,
+  );
+  const [deleteUploadsTarget, setDeleteUploadsTarget] =
+    useState<PublicMember | null>(null);
   const [confirmOrphaned, setConfirmOrphaned] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [knockOpen, setKnockOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [tab, setTab] = useState<SessionTab>("files");
 
   const memberIds = new Set(s.members.map((m) => m.user_id));
-  const orphanedCount = s.bucket.filter((e) => !memberIds.has(e.uploader_id)).length;
-  const ownUploadCount = s.bucket.filter((e) => e.uploader_id === s.yourUserId).length;
+  const orphanedCount = s.bucket.filter(
+    (e) => !memberIds.has(e.uploader_id),
+  ).length;
+  const ownUploadCount = s.bucket.filter(
+    (e) => e.uploader_id === s.yourUserId,
+  ).length;
 
   // Warn before leaving with active work.
   useEffect(() => {
     function onBeforeUnload(e: BeforeUnloadEvent) {
       if (s.hasActiveWork) {
         e.preventDefault();
-        e.returnValue = '';
+        e.returnValue = "";
       }
     }
-    window.addEventListener('beforeunload', onBeforeUnload);
-    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [s.hasActiveWork]);
 
   async function copyInvite() {
     const url = `${window.location.origin}${sessionPath(cleanSlug)}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast('Invite link copied.', 'success');
+      toast("Invite link copied.", "success");
     } catch {
-      toast(url, 'info');
+      toast(url, "info");
+    }
+  }
+
+  async function copySlug() {
+    try {
+      await navigator.clipboard.writeText(cleanSlug);
+      toast("Session ID copied.", "success");
+    } catch {
+      toast(cleanSlug, "info");
     }
   }
 
   async function performLeave() {
     await s.leave();
     sessionStore.reset();
-    navigate('/');
+    navigate("/");
   }
 
   async function onLeave() {
@@ -77,180 +116,340 @@ export function Session() {
     await performLeave();
   }
 
-  if (s.status === 'fatal') {
+  if (s.status === "fatal") {
     return (
-      <div className="session_fatal">
-        <Card title="Session unavailable" helper={s.fatalMessage}>
-          <Button onClick={() => navigate('/')}>Back to home</Button>
-        </Card>
-      </div>
+      <Page>
+        <StateScreen
+          tone="danger"
+          icon={<RiErrorWarningLine size={30} />}
+          title="Session unavailable"
+          helper={s.fatalMessage}
+          action={
+            <Button onClick={() => navigate("/")}>Back to home</Button>
+          }
+        />
+      </Page>
     );
   }
 
-  if (s.status === 'connecting') {
+  if (s.status === "connecting") {
     return (
-      <div className="session_loading">
-        <Skeleton height={48} />
-        <Skeleton height={120} />
-        <Skeleton height={200} />
-      </div>
+      <Page wide>
+        <div className="session_loading">
+          <Skeleton height={96} />
+          <div className="session_loading_grid">
+            <Skeleton height={280} />
+            <Skeleton height={280} />
+          </div>
+        </div>
+      </Page>
     );
   }
 
   const onlineCount = s.members.filter((m) => m.online).length;
+  const filesEmpty = s.bucket.length === 0 && s.uploads.length === 0;
+
+  const identity = (
+    <div className="session_identity">
+      <button
+        type="button"
+        className="session_chip"
+        onClick={copySlug}
+        title="Copy session ID"
+      >
+        <span className="session_chip_hash">#</span>
+        <span className="session_chip_text">{cleanSlug}</span>
+        <RiFileCopyLine size={14} />
+      </button>
+      <PresenceStack members={s.members} />
+      {s.isOwner && <Badge variant="accent">owner</Badge>}
+    </div>
+  );
+
+  const bar = (
+    <>
+      <div className="session_bar_identity">{identity}</div>
+      <div className="session_bar_actions">
+        <Button
+          size="sm"
+          icon={<RiShareForwardLine size={16} />}
+          onClick={copyInvite}
+        >
+          Invite
+        </Button>
+
+        {s.isOwner && (
+          <Popover
+            open={knockOpen}
+            onClose={() => setKnockOpen(false)}
+            label="Knock queue"
+            trigger={
+              <button
+                type="button"
+                className="session_bell"
+                aria-label={
+                  s.knockers.length > 0
+                    ? `Knock queue, ${s.knockers.length} waiting`
+                    : "Knock queue"
+                }
+                aria-haspopup="dialog"
+                aria-expanded={knockOpen}
+                onClick={() => setKnockOpen((o) => !o)}
+              >
+                <RiUserAddLine size={18} />
+                {s.knockers.length > 0 && (
+                  <span className="session_bell_badge">
+                    {s.knockers.length}
+                  </span>
+                )}
+              </button>
+            }
+          >
+            <div className="session_pop">
+              <div className="session_pop_head">
+                <span className="session_pop_title">Knock queue</span>
+                {s.knockingPaused && <Badge variant="warn">paused</Badge>}
+              </div>
+              {s.knockers.length === 0 ? (
+                <p className="session_pop_empty">No one is waiting.</p>
+              ) : (
+                <ul className="session_knock_list">
+                  {s.knockers.map((k) => (
+                    <KnockQueueItem
+                      key={k.knock_id}
+                      knock={k}
+                      onAdmit={s.admit}
+                      onReject={s.reject}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Popover>
+        )}
+
+        {s.isOwner && (
+          <Popover
+            open={menuOpen}
+            onClose={() => setMenuOpen(false)}
+            label="Owner actions"
+            trigger={
+              <button
+                type="button"
+                className="session_iconbtn"
+                aria-label="Owner actions"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((o) => !o)}
+              >
+                <RiMore2Fill size={18} />
+              </button>
+            }
+          >
+            <div className="session_menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                className="session_menu_item"
+                onClick={() => {
+                  setMenuOpen(false);
+                  s.setPaused(!s.knockingPaused);
+                }}
+              >
+                {s.knockingPaused ? (
+                  <RiLockUnlockLine size={16} />
+                ) : (
+                  <RiLockLine size={16} />
+                )}
+                {s.knockingPaused ? "Resume knocking" : "Pause knocking"}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="session_menu_item session_menu_danger"
+                disabled={orphanedCount === 0}
+                onClick={() => {
+                  setMenuOpen(false);
+                  setConfirmOrphaned(true);
+                }}
+              >
+                <RiDeleteBin6Line size={16} />
+                Delete orphaned
+                {orphanedCount > 0 ? ` (${orphanedCount})` : ""}
+              </button>
+            </div>
+          </Popover>
+        )}
+
+        <Button
+          size="sm"
+          variant="danger"
+          icon={<RiLogoutBoxRLine size={16} />}
+          onClick={onLeave}
+        >
+          Leave
+        </Button>
+      </div>
+    </>
+  );
 
   return (
-    <div className="session">
-      {s.reconnecting && (
-        <div className="session_reconnecting" role="status" aria-live="polite">
-          Connection lost — reconnecting…
-        </div>
-      )}
-      <header className="session_header">
-        <div className="session_header_info">
-          <span className="session_slug">{cleanSlug}</span>
-          <span className="session_count">
-            {onlineCount}/{s.members.length} online
-          </span>
-        </div>
-        <div className="session_header_actions">
-          <Button size="sm" variant="ghost" icon={<FaCopy size={16} />} onClick={copyInvite}>
-            Copy invite
-          </Button>
-          <Button size="sm" variant="danger" icon={<FaRightFromBracket size={16} />} onClick={onLeave}>
-            Leave
-          </Button>
-        </div>
-      </header>
+    <Page wide bar={bar}>
+      <div className="session">
+        {s.reconnecting && (
+          <div
+            className="session_reconnecting"
+            role="status"
+            aria-live="polite"
+          >
+            <RiWifiOffLine size={16} />
+            Connection lost — reconnecting…
+          </div>
+        )}
 
-      {s.isOwner && (
-        <aside className="session_owner_panel">
-          <Card>
-            <div className="session_owner_head">
-              <h2 className="session_owner_title">
-                Knock queue {s.knockers.length > 0 && <Badge variant="accent">{s.knockers.length}</Badge>}
-              </h2>
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={s.knockingPaused ? <FaLock size={16} /> : <FaLockOpen size={16} />}
-                onClick={() => s.setPaused(!s.knockingPaused)}
-              >
-                {s.knockingPaused ? 'Knocking paused' : 'Pause knocking'}
-              </Button>
-            </div>
-            {s.knockers.length === 0 ? (
-              <p className="session_owner_empty">No one is waiting.</p>
+        <div className="session_meta">{identity}</div>
+
+        <Tabs
+          className="session_tabs"
+          ariaLabel="Session sections"
+          value={tab}
+          onChange={(id) => setTab(id as SessionTab)}
+          items={[
+            { id: "files", label: "Files", badge: s.bucket.length || undefined },
+            { id: "people", label: "People", badge: s.members.length },
+            {
+              id: "activity",
+              label: "Activity",
+              badge: s.transfers.length || undefined,
+            },
+          ]}
+        />
+
+        <div className="session_panes" data-tab={tab}>
+          <Panel
+            className="session_pane session_pane_files"
+            title="Shared bucket"
+            icon={<RiFolder3Line size={16} />}
+            count={s.bucket.length}
+          >
+            <UploadDropzone onFiles={s.uploadFiles} />
+
+            {filesEmpty ? (
+              <div className="session_empty">
+                <span className="session_empty_icon">
+                  <RiFolder3Line size={26} />
+                </span>
+                <p className="session_empty_title">No files yet</p>
+                <p className="session_empty_help">
+                  {s.isOwner
+                    ? "Share the invite to bring people in, then drop files to share with everyone."
+                    : "Drop a file above to share it with everyone in the session."}
+                </p>
+                {s.isOwner && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<RiShareForwardLine size={16} />}
+                    onClick={copyInvite}
+                  >
+                    Copy invite link
+                  </Button>
+                )}
+              </div>
             ) : (
-              <ul className="session_knock_list">
-                {s.knockers.map((k) => (
-                  <KnockQueueItem key={k.knock_id} knock={k} onAdmit={s.admit} onReject={s.reject} />
+              <ul className="session_file_list">
+                {s.uploads.map((u) => (
+                  <FileRow
+                    key={u.tempId}
+                    entry={u.entry}
+                    uploaderName="you"
+                    isYours
+                    justAdded={false}
+                    downloadUrl="#"
+                    onDelete={() => undefined}
+                    progress={u.fraction}
+                    onCancelUpload={u.abort}
+                  />
                 ))}
-              </ul>
-            )}
-          </Card>
-        </aside>
-      )}
-
-      <div className="session_grid">
-        <aside className="session_members">
-          <h2 className="session_section_title">
-            <FaUsers size={16} /> Members
-          </h2>
-          <ul className="session_member_list">
-            {s.members.map((m) => (
-              <MemberRow
-                key={m.user_id}
-                member={m}
-                isYou={m.user_id === s.yourUserId}
-                viewerIsOwner={s.isOwner}
-                onSend={setSendTarget}
-                onKick={setKickTarget}
-                onMakeOwner={setMakeOwnerTarget}
-                onDeleteUploads={setDeleteUploadsTarget}
-              />
-            ))}
-          </ul>
-
-          {s.transfers.length > 0 && (
-            <>
-              <h2 className="session_section_title">Transfers</h2>
-              <ul className="session_transfer_list">
-                {s.transfers.map((t) => (
-                  <TransferProgressRow
-                    key={t.key}
-                    transfer={t}
-                    onCancel={s.cancelTransfer}
-                    onDismiss={s.dismissTransfer}
+                {s.bucket.map((e) => (
+                  <FileRow
+                    key={e.id}
+                    entry={e}
+                    uploaderName={s.nameOf(e.uploader_id)}
+                    isYours={e.uploader_id === s.yourUserId}
+                    canDelete={e.uploader_id === s.yourUserId || s.isOwner}
+                    justAdded={s.justAdded.has(e.id)}
+                    downloadUrl={api.downloadUrl(cleanSlug, e.id)}
+                    onDelete={s.deleteFile}
                   />
                 ))}
               </ul>
-            </>
-          )}
-        </aside>
-
-        <section className="session_bucket">
-          <div className="session_bucket_head">
-            <h2 className="session_section_title">
-              <FaFileLines size={16} /> Shared bucket
-            </h2>
-            {s.isOwner && orphanedCount > 0 && (
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={<FaTrashCan size={16} />}
-                onClick={() => setConfirmOrphaned(true)}
-              >
-                Delete orphaned ({orphanedCount})
-              </Button>
             )}
-          </div>
-          <UploadDropzone onFiles={s.uploadFiles} />
+          </Panel>
 
-          {s.bucket.length === 0 && s.uploads.length === 0 ? (
-            <EmptyState
-              icon={<FaFileLines size={32} />}
-              title="No files yet"
-              helper="Drop one above to share it with everyone in the session."
-            />
-          ) : (
-            <ul className="session_file_list">
-              {s.uploads.map((u) => (
-                <FileRow
-                  key={u.tempId}
-                  entry={u.entry}
-                  uploaderName="you"
-                  isYours
-                  justAdded={false}
-                  downloadUrl="#"
-                  onDelete={() => undefined}
-                  progress={u.fraction}
-                  onCancelUpload={u.abort}
-                />
-              ))}
-              {s.bucket.map((e) => (
-                <FileRow
-                  key={e.id}
-                  entry={e}
-                  uploaderName={s.nameOf(e.uploader_id)}
-                  isYours={e.uploader_id === s.yourUserId}
-                  canDelete={e.uploader_id === s.yourUserId || s.isOwner}
-                  justAdded={s.justAdded.has(e.id)}
-                  downloadUrl={api.downloadUrl(cleanSlug, e.id)}
-                  onDelete={s.deleteFile}
-                />
-              ))}
-            </ul>
-          )}
-        </section>
+          <div className="session_rail">
+            <Panel
+              className="session_pane session_pane_people"
+              title="People"
+              icon={<RiGroupLine size={16} />}
+              count={s.members.length}
+              meta={`${onlineCount} online`}
+            >
+              <ul className="session_member_list">
+                {s.members.map((m) => (
+                  <MemberRow
+                    key={m.user_id}
+                    member={m}
+                    isYou={m.user_id === s.yourUserId}
+                    viewerIsOwner={s.isOwner}
+                    onSend={setSendTarget}
+                    onKick={setKickTarget}
+                    onMakeOwner={setMakeOwnerTarget}
+                    onDeleteUploads={setDeleteUploadsTarget}
+                  />
+                ))}
+              </ul>
+            </Panel>
+
+            <Panel
+              className="session_pane session_pane_activity"
+              title="Activity"
+              icon={<RiExchangeLine size={16} />}
+              count={s.transfers.length || undefined}
+            >
+              {s.transfers.length === 0 ? (
+                <p className="session_empty_text">No transfers yet.</p>
+              ) : (
+                <ul className="session_transfer_list">
+                  {s.transfers.map((t) => (
+                    <TransferProgressRow
+                      key={t.key}
+                      transfer={t}
+                      onCancel={s.cancelTransfer}
+                      onDismiss={s.dismissTransfer}
+                    />
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          </div>
+        </div>
       </div>
 
-      <SendFileModal recipient={sendTarget} onClose={() => setSendTarget(null)} onSend={(r, files) => {
-        s.startSend(r, files);
-        setSendTarget(null);
-      }} />
+      <SendFileModal
+        recipient={sendTarget}
+        onClose={() => setSendTarget(null)}
+        onSend={(r, files) => {
+          s.startSend(r, files);
+          setSendTarget(null);
+        }}
+      />
 
-      <IncomingTransferModal request={s.incoming} onAccept={s.acceptIncoming} onDecline={s.declineIncoming} />
+      <IncomingTransferModal
+        request={s.incoming}
+        onAccept={s.acceptIncoming}
+        onDecline={s.declineIncoming}
+      />
 
       <Modal
         open={!!kickTarget}
@@ -273,7 +472,8 @@ export function Session() {
           </>
         }
       >
-        They’ll be removed immediately and their uploaded files will be deleted for everyone.
+        They’ll be removed immediately and their uploaded files will be deleted
+        for everyone.
       </Modal>
 
       <Modal
@@ -313,7 +513,12 @@ export function Session() {
           </>
         }
       >
-        {s.ownerOffer && <>{s.nameOf(s.ownerOffer.from_user_id)} wants to transfer ownership to you.</>}
+        {s.ownerOffer && (
+          <>
+            {s.nameOf(s.ownerOffer.from_user_id)} wants to transfer ownership to
+            you.
+          </>
+        )}
       </Modal>
 
       <Modal
@@ -322,13 +527,17 @@ export function Session() {
         title={`Delete all of ${deleteUploadsTarget?.display_name}’s uploads?`}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setDeleteUploadsTarget(null)}>
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteUploadsTarget(null)}
+            >
               Cancel
             </Button>
             <Button
               variant="danger"
               onClick={() => {
-                if (deleteUploadsTarget) s.deleteMemberFiles(deleteUploadsTarget.user_id);
+                if (deleteUploadsTarget)
+                  s.deleteMemberFiles(deleteUploadsTarget.user_id);
                 setDeleteUploadsTarget(null);
               }}
             >
@@ -337,7 +546,8 @@ export function Session() {
           </>
         }
       >
-        Every file this member uploaded will be removed from the bucket for everyone.
+        Every file this member uploaded will be removed from the bucket for
+        everyone.
       </Modal>
 
       <Modal
@@ -356,7 +566,7 @@ export function Session() {
                 setConfirmOrphaned(false);
               }}
             >
-              Delete {orphanedCount} file{orphanedCount === 1 ? '' : 's'}
+              Delete {orphanedCount} file{orphanedCount === 1 ? "" : "s"}
             </Button>
           </>
         }
@@ -395,9 +605,10 @@ export function Session() {
           </>
         }
       >
-        You have {ownUploadCount} file{ownUploadCount === 1 ? '' : 's'} in the shared bucket. If you keep
-        them, they’ll stay for the others until the owner removes them.
+        You have {ownUploadCount} file{ownUploadCount === 1 ? "" : "s"} in the
+        shared bucket. If you keep them, they’ll stay for the others until the
+        owner removes them.
       </Modal>
-    </div>
+    </Page>
   );
 }

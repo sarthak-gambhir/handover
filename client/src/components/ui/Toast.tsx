@@ -5,14 +5,19 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from 'react';
-import { createPortal } from 'react-dom';
-import { FaCircleCheck, FaTriangleExclamation, FaCircleXmark, FaCircleInfo } from 'react-icons/fa6';
-import { cx } from '../../lib/cx';
-import { useExitAnimation } from '../../lib/use_exit_animation';
-import './Toast.scss';
+} from "react";
+import { createPortal } from "react-dom";
+import {
+  RiCheckboxCircleFill,
+  RiErrorWarningFill,
+  RiCloseCircleFill,
+  RiInformationFill,
+} from "react-icons/ri";
+import { cx } from "../../lib/cx";
+import { useExitAnimation } from "../../lib/use_exit_animation";
+import "./Toast.scss";
 
-export type ToastVariant = 'success' | 'warn' | 'danger' | 'info';
+export type ToastVariant = "success" | "warn" | "danger" | "info";
 
 interface ToastEntry {
   id: number;
@@ -29,18 +34,24 @@ const ToastContext = createContext<ToastApi | null>(null);
 
 export function useToast(): ToastApi {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error('useToast must be used within ToastProvider');
+  if (!ctx) throw new Error("useToast must be used within ToastProvider");
   return ctx;
 }
 
 const ICONS: Record<ToastVariant, ReactNode> = {
-  success: <FaCircleCheck size={18} />,
-  warn: <FaTriangleExclamation size={18} />,
-  danger: <FaCircleXmark size={18} />,
-  info: <FaCircleInfo size={18} />,
+  success: <RiCheckboxCircleFill size={18} />,
+  warn: <RiErrorWarningFill size={18} />,
+  danger: <RiCloseCircleFill size={18} />,
+  info: <RiInformationFill size={18} />,
 };
 
-function ToastItem({ entry, onRemove }: { entry: ToastEntry; onRemove: (id: number) => void }) {
+function ToastItem({
+  entry,
+  onRemove,
+}: {
+  entry: ToastEntry;
+  onRemove: (id: number) => void;
+}) {
   const { mounted, exiting, ref } = useExitAnimation(entry.open, 200);
   if (!mounted) {
     // Defer removal to after exit completes.
@@ -50,7 +61,11 @@ function ToastItem({ entry, onRemove }: { entry: ToastEntry; onRemove: (id: numb
   return (
     <div
       ref={ref}
-      className={cx('toast', `toast_${entry.variant}`, exiting && 'toast_exiting')}
+      className={cx(
+        "toast",
+        `toast_${entry.variant}`,
+        exiting && "toast_exiting",
+      )}
       role="status"
     >
       <span className="toast_icon">{ICONS[entry.variant]}</span>
@@ -64,7 +79,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const nextId = useRef(1);
 
   const close = useCallback((id: number) => {
-    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, open: false } : t)));
+    setToasts((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, open: false } : t)),
+    );
   }, []);
 
   const remove = useCallback((id: number) => {
@@ -72,7 +89,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toast = useCallback(
-    (message: string, variant: ToastVariant = 'info') => {
+    (message: string, variant: ToastVariant = "info") => {
       const id = nextId.current++;
       setToasts((prev) => [...prev, { id, message, variant, open: true }]);
       setTimeout(() => close(id), 4000);

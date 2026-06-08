@@ -1,12 +1,12 @@
-import { FaEllipsisVertical, FaPaperPlane } from 'react-icons/fa6';
-import { useEffect, useRef, useState } from 'react';
-import { Badge } from './ui/Badge';
-import { PresenceDot } from './ui/PresenceDot';
-import { Button } from './ui/Button';
-import type { PublicMember } from '../lib/api';
-import { shortId } from '../lib/format';
-import { cx } from '../lib/cx';
-import './MemberRow.scss';
+import { RiMore2Fill, RiSendPlane2Line } from "react-icons/ri";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Badge } from "./ui/Badge";
+import { PresenceDot } from "./ui/PresenceDot";
+import { Button } from "./ui/Button";
+import type { PublicMember } from "../lib/api";
+import { shortId } from "../lib/format";
+import "./MemberRow.scss";
 
 interface MemberRowProps {
   member: PublicMember;
@@ -28,25 +28,54 @@ export function MemberRow({
   onDeleteUploads,
 }: MemberRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  // The menu is portaled to <body> so a scrollable roster can't clip it; we
+  // anchor it to the trigger with a fixed position computed on open.
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
+    null,
+  );
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const canSend = !isYou && member.online;
   const canManage = viewerIsOwner && !isYou;
+
+  function toggleMenu() {
+    setMenuOpen((open) => {
+      if (!open && menuWrapRef.current) {
+        const r = menuWrapRef.current.getBoundingClientRect();
+        setMenuPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+      }
+      return !open;
+    });
+  }
 
   useEffect(() => {
     if (!menuOpen) return;
     function onDocClick(e: MouseEvent) {
-      if (menuWrapRef.current && !menuWrapRef.current.contains(e.target as Node)) {
+      const t = e.target as Node;
+      if (
+        !menuWrapRef.current?.contains(t) &&
+        !menuRef.current?.contains(t)
+      ) {
         setMenuOpen(false);
       }
     }
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setMenuOpen(false);
+      if (e.key === "Escape") setMenuOpen(false);
     }
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('keydown', onKey);
+    // The fixed menu can't follow the trigger while scrolling/resizing, so
+    // dismiss it instead of letting it drift away from the row.
+    function onReposition() {
+      setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onReposition, true);
+    window.addEventListener("resize", onReposition);
     return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onReposition, true);
+      window.removeEventListener("resize", onReposition);
     };
   }, [menuOpen]);
 
@@ -55,7 +84,9 @@ export function MemberRow({
       <PresenceDot online={member.online} />
       <div className="member_row_identity">
         <span className="member_row_name">{member.display_name}</span>
-        {!isYou && <span className="member_row_tag">· {shortId(member.user_id)}</span>}
+        {!isYou && (
+          <span className="member_row_tag">· {shortId(member.user_id)}</span>
+        )}
       </div>
       <div className="member_row_badges">
         {isYou && <Badge variant="accent">you</Badge>}
@@ -66,7 +97,7 @@ export function MemberRow({
           <Button
             size="sm"
             variant="ghost"
-            icon={<FaPaperPlane size={16} />}
+            icon={<RiSendPlane2Line size={16} />}
             disabled={!canSend}
             onClick={() => onSend(member)}
             aria-label={`Send file to ${member.display_name}`}
@@ -79,46 +110,54 @@ export function MemberRow({
             <Button
               size="sm"
               variant="ghost"
-              icon={<FaEllipsisVertical size={16} />}
+              icon={<RiMore2Fill size={16} />}
               aria-label="Member actions"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={toggleMenu}
             />
-            {menuOpen && (
-              <div className={cx('member_row_menu')} role="menu">
-                <button
-                  className="member_row_menu_item"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onMakeOwner(member);
-                  }}
+            {menuOpen &&
+              menuPos &&
+              createPortal(
+                <div
+                  ref={menuRef}
+                  className="member_row_menu"
+                  role="menu"
+                  style={{ top: menuPos.top, right: menuPos.right }}
                 >
-                  Make owner
-                </button>
-                <button
-                  className="member_row_menu_item"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onDeleteUploads(member);
-                  }}
-                >
-                  Delete all uploads
-                </button>
-                <button
-                  className="member_row_menu_item member_row_menu_danger"
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onKick(member);
-                  }}
-                >
-                  Kick
-                </button>
-              </div>
-            )}
+                  <button
+                    className="member_row_menu_item"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onMakeOwner(member);
+                    }}
+                  >
+                    Make owner
+                  </button>
+                  <button
+                    className="member_row_menu_item"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDeleteUploads(member);
+                    }}
+                  >
+                    Delete all uploads
+                  </button>
+                  <button
+                    className="member_row_menu_item member_row_menu_danger"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onKick(member);
+                    }}
+                  >
+                    Kick
+                  </button>
+                </div>,
+                document.body,
+              )}
           </div>
         )}
       </div>

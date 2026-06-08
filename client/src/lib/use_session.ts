@@ -35,6 +35,10 @@ export function useSession(slug: string) {
   const [justAdded, setJustAdded] = useState<Set<string>>(new Set());
 
   const socketRef = useRef<AppSocket | null>(null);
+  // Set when this client intentionally leaves so the resulting server-side
+  // teardown (session:ended for an owner, forced disconnect) is not surfaced
+  // as a "fatal" screen — the user is already on their way to the home page.
+  const leavingRef = useRef(false);
   const connRef = useRef<Map<string, Conn>>(new Map());
   const filesRef = useRef<Map<string, File[]>>(new Map());
   const outgoingQueue = useRef<Array<{ key: string; to_user_id: string }>>([]);
@@ -122,9 +126,10 @@ export function useSession(slug: string) {
     });
 
     socket.on('disconnect', (reason) => {
-      // Ignore client-initiated teardown (unmount, fatal handlers); only show
-      // the reconnecting banner for unexpected drops that socket.io will retry.
-      if (reason !== 'io client disconnect') setReconnecting(true);
+      // Ignore client-initiated teardown (unmount, fatal handlers) and the
+      // forced disconnect that follows an intentional leave; only show the
+      // reconnecting banner for unexpected drops that socket.io will retry.
+      if (reason !== 'io client disconnect' && !leavingRef.current) setReconnecting(true);
     });
 
     socket.on('state:snapshot', (p) => {
@@ -262,11 +267,15 @@ export function useSession(slug: string) {
       socket.disconnect();
     });
     socket.on('session:ended', () => {
+      // The owner who initiates a leave also receives this broadcast; don't
+      // flash the fatal screen at someone who chose to leave.
+      if (leavingRef.current) return;
       setStatus('fatal');
       setFatalMessage('This session has ended.');
       socket.disconnect();
     });
     socket.on('error', (e) => {
+      if (leavingRef.current) return;
       if (e.code === 'already_open_elsewhere') {
         setStatus('fatal');
         setFatalMessage('This session is already open in another tab. Close that tab and reload here.');
@@ -430,6 +439,7 @@ export function useSession(slug: string) {
   const leave = useCallback(
     () =>
       new Promise<void>((resolve) => {
+        leavingRef.current = true;
         const socket = socketRef.current;
         if (!socket || socket.disconnected) {
           resolve();
@@ -441,12 +451,21 @@ export function useSession(slug: string) {
           settled = true;
           resolve();
         };
-        // Resolve on the server's ack so we don't tear down the socket before
-        // 'leave' is processed. Fall back after a short delay if no ack arrives.
+        // Always tell the server we're leaving so it can clean up.
         socket.emit('leave', finish);
+        // The owner leaving ends the whole session; the server disconnects the
+        // room before the ack can come back, so resolve right away and let the
+        // caller navigate home instead of waiting out the fallback timeout.
+        if (isOwner) {
+          finish();
+          return;
+        }
+        // For a regular member, resolve on the server's ack so we don't tear
+        // down the socket before 'leave' is processed. Fall back after a short
+        // delay if no ack arrives.
         window.setTimeout(finish, 1500);
       }),
-    [],
+    [isOwner],
   );
 
   const deleteOwnUploads = useCallback(async () => {

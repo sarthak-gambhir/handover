@@ -1,40 +1,41 @@
-@use 'tokens' as t;
-@use 'reset';
+@use "tokens" as t;
+@use "reset";
 
 :root {
-  --bg:             #{t.$bg};
-  --bg_elevated:    #{t.$bg_elevated};
-  --bg_overlay:     #{t.$bg_overlay};
-  --border:         #{t.$border};
-  --border_strong:  #{t.$border_strong};
-  --fg:             #{t.$fg};
-  --fg_muted:       #{t.$fg_muted};
-  --fg_subtle:      #{t.$fg_subtle};
-  --accent:         #{t.$accent};
-  --accent_soft:    #{t.$accent_soft};
-  --success:        #{t.$success};
-  --warn:           #{t.$warn};
-  --danger:         #{t.$danger};
+  --bg: #{t.$bg};
+  --bg_elevated: #{t.$bg_elevated};
+  --bg_overlay: #{t.$bg_overlay};
+  --border: #{t.$border};
+  --border_strong: #{t.$border_strong};
+  --fg: #{t.$fg};
+  --fg_muted: #{t.$fg_muted};
+  --fg_subtle: #{t.$fg_subtle};
+  --accent: #{t.$accent};
+  --accent_soft: #{t.$accent_soft};
+  --success: #{t.$success};
+  --warn: #{t.$warn};
+  --danger: #{t.$danger};
 
-  --radius_sm:  #{t.$radius_sm};
-  --radius_md:  #{t.$radius_md};
-  --radius_lg:  #{t.$radius_lg};
-  --radius_xl:  #{t.$radius_xl};
+  --radius_sm: #{t.$radius_sm};
+  --radius_md: #{t.$radius_md};
+  --radius_lg: #{t.$radius_lg};
+  --radius_xl: #{t.$radius_xl};
 
-  --font_sans:  #{t.$font_sans};
-  --font_mono:  #{t.$font_mono};
+  --font_sans: #{t.$font_sans};
+  --font_mono: #{t.$font_mono};
+  --font_display: #{t.$font_display};
 
-  --space_1:  #{t.$space_1};
-  --space_2:  #{t.$space_2};
-  --space_3:  #{t.$space_3};
-  --space_4:  #{t.$space_4};
-  --space_5:  #{t.$space_5};
-  --space_6:  #{t.$space_6};
-  --space_7:  #{t.$space_7};
+  --space_1: #{t.$space_1};
+  --space_2: #{t.$space_2};
+  --space_3: #{t.$space_3};
+  --space_4: #{t.$space_4};
+  --space_5: #{t.$space_5};
+  --space_6: #{t.$space_6};
+  --space_7: #{t.$space_7};
 
-  --duration_fast:  #{t.$duration_fast};
-  --duration_med:   #{t.$duration_med};
-  --duration_slow:  #{t.$duration_slow};
-  --ease_out:       #{t.$ease_out};
-  --ease_in:        #{t.$ease_in};
+  --duration_fast: #{t.$duration_fast};
+  --duration_med: #{t.$duration_med};
+  --duration_slow: #{t.$duration_slow};
+  --ease_out: #{t.$ease_out};
+  --ease_in: #{t.$ease_in};
 }

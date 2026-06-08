@@ -13,6 +13,8 @@ const HIGH_WATER = 16 * 1024 * 1024;
 
 let BACKPRESSURE = false;
 let pickerDelayMs = 0;
+let writeDelayMs = 0;
+let ERROR_ON_CLOSE = false;
 let captured: Map<string, Uint8Array[]>;
 
 type AnyFn = (...args: any[]) => void;
@@ -67,12 +69,14 @@ class FakeDataChannel {
     this.readyState = 'closed';
     // The close event is asynchronous in real WebRTC: already-sent messages are
     // still delivered first. Defer to a macrotask so queued onmessage handling
-    // (and the receiver's promise chain) completes before onclose fires.
+    // (and the receiver's promise chain) completes before onclose fires. Some
+    // browsers also raise `error` on the peer during this teardown.
     setTimeout(() => this.onclose?.(), 0);
     const peer = this.peer;
     if (peer && !peer.closed) {
       peer.closed = true;
       peer.readyState = 'closed';
+      if (ERROR_ON_CLOSE) setTimeout(() => peer.onerror?.(), 0);
       setTimeout(() => peer.onclose?.(), 0);
     }
   }
@@ -155,6 +159,7 @@ function installFsaa() {
       return {
         createWritable: async () => ({
           write: async (chunk: Uint8Array) => {
+            if (writeDelayMs) await new Promise((r) => setTimeout(r, writeDelayMs));
             parts.push(new Uint8Array(chunk));
           },
           close: async () => {},
@@ -239,6 +244,8 @@ beforeEach(() => {
   pcs.length = 0;
   BACKPRESSURE = false;
   pickerDelayMs = 0;
+  writeDelayMs = 0;
+  ERROR_ON_CLOSE = false;
   (globalThis as any).RTCPeerConnection = FakePeerConnection;
   installFsaa();
 });
@@ -283,6 +290,34 @@ describe('webrtc transfer protocol', () => {
 
     expect(res.failures).toEqual([]);
     expect(concat(captured.get('slow.bin')!)).toEqual(bytes);
+  });
+
+  it('does not spuriously fail when the channel closes while writes are still draining', async () => {
+    // The sender closes the data channel right after flushing `done`, so the
+    // close event can land before the receiver has finished processing its
+    // queued chunks. The receiver must defer its completeness check to the end
+    // of the queue rather than failing with `connection_interrupted`.
+    writeDelayMs = 5;
+    const bytes = randomBytes(50_000);
+    const res = await runTransfer([fakeFile('drain.bin', bytes)]);
+
+    expect(res.failures).toEqual([]);
+    expect(res.receiverDone).toBe(true);
+    expect(concat(captured.get('drain.bin')!)).toEqual(bytes);
+  });
+
+  it('does not spuriously fail when the channel raises error+close during teardown', async () => {
+    // Browsers often fire `error` (e.g. SCTP "User-Initiated Abort") on the
+    // receiver as the sender tears down, right after the last bytes land. With
+    // slow writes still draining, that must not flip a saved file to failed.
+    ERROR_ON_CLOSE = true;
+    writeDelayMs = 5;
+    const bytes = randomBytes(50_000);
+    const res = await runTransfer([fakeFile('teardown.bin', bytes)]);
+
+    expect(res.failures).toEqual([]);
+    expect(res.receiverDone).toBe(true);
+    expect(concat(captured.get('teardown.bin')!)).toEqual(bytes);
   });
 
   it('completes correctly while backpressure pauses and resumes the sender', async () => {

@@ -1,19 +1,23 @@
-import { Link } from 'react-router-dom';
-import { EmptyState } from '../components/ui/EmptyState';
-import { FaFileCircleQuestion } from 'react-icons/fa6';
-import './NotFound.scss';
+import { useNavigate } from "react-router-dom";
+import { RiCompass3Line } from "react-icons/ri";
+import { Page } from "../components/ui/Page";
+import { StateScreen } from "../components/ui/StateScreen";
+import { Button } from "../components/ui/Button";
 
 export function NotFound() {
+  const navigate = useNavigate();
   return (
-    <div className="not_found">
-      <EmptyState
-        icon={<FaFileCircleQuestion size={32} />}
+    <Page>
+      <StateScreen
+        icon={<RiCompass3Line size={30} />}
         title="Page not found"
         helper="The link may be broken or the session has ended."
+        action={
+          <Button variant="secondary" onClick={() => navigate("/")}>
+            Back to home
+          </Button>
+        }
       />
-      <Link className="not_found_link" to="/">
-        Back to home
-      </Link>
-    </div>
+    </Page>
   );
 }

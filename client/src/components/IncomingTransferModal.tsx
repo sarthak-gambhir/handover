@@ -1,11 +1,15 @@
-import { useState } from 'react';
-import { FaTriangleExclamation } from 'react-icons/fa6';
-import { Modal } from './ui/Modal';
-import { Button } from './ui/Button';
-import { formatBytes, shortId } from '../lib/format';
-import { isFsaaAvailable, FSAA_WARN_FLOOR, LARGE_FILE_WARN } from '../lib/webrtc';
-import type { TransferFileMeta } from '../lib/socket';
-import './IncomingTransferModal.scss';
+import { useState } from "react";
+import { RiErrorWarningLine } from "react-icons/ri";
+import { Modal } from "./ui/Modal";
+import { Button } from "./ui/Button";
+import { formatBytes, shortId } from "../lib/format";
+import {
+  isFsaaAvailable,
+  FSAA_WARN_FLOOR,
+  LARGE_FILE_WARN,
+} from "../lib/webrtc";
+import type { TransferFileMeta } from "../lib/socket";
+import "./IncomingTransferModal.scss";
 
 export interface IncomingRequest {
   transfer_id: string;
@@ -29,7 +33,8 @@ export function IncomingTransferModal({
 
   const hasLarge = request.files.some((f) => f.size > LARGE_FILE_WARN);
   const fsaa = isFsaaAvailable();
-  const memoryRisk = !fsaa && request.files.some((f) => f.size > FSAA_WARN_FLOOR);
+  const memoryRisk =
+    !fsaa && request.files.some((f) => f.size > FSAA_WARN_FLOOR);
   const manyFiles = request.files.length > 8;
   const canAccept = !hasLarge || confirmedLarge;
 
@@ -56,22 +61,26 @@ export function IncomingTransferModal({
             <span className="incoming_transfer_modal_name" title={f.name}>
               {f.name}
             </span>
-            <span className="incoming_transfer_modal_size">{formatBytes(f.size)}</span>
+            <span className="incoming_transfer_modal_size">
+              {formatBytes(f.size)}
+            </span>
           </li>
         ))}
       </ul>
 
       {manyFiles && (
         <p className="incoming_transfer_modal_note">
-          That’s a lot of files ({request.files.length}). They’ll arrive one after another.
+          That’s a lot of files ({request.files.length}). They’ll arrive one
+          after another.
         </p>
       )}
 
       {memoryRisk && (
         <p className="incoming_transfer_modal_warn">
-          <FaTriangleExclamation size={16} />
-          Your browser will hold this file in memory while transferring. For files near 1&nbsp;GB,
-          consider asking the sender to use the shared bucket instead.
+          <RiErrorWarningLine size={16} />
+          Your browser will hold this file in memory while transferring. For
+          files near 1&nbsp;GB, consider asking the sender to use the shared
+          bucket instead.
         </p>
       )}
 
@@ -83,7 +92,8 @@ export function IncomingTransferModal({
             onChange={(e) => setConfirmedLarge(e.target.checked)}
           />
           <span>
-            This includes a file over 2&nbsp;GB. I have enough disk/memory to receive it.
+            This includes a file over 2&nbsp;GB. I have enough disk/memory to
+            receive it.
           </span>
         </label>
       )}

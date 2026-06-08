@@ -337,11 +337,28 @@ export class ReceiverConnection {
       this.dc = dc;
       dc.binaryType = 'arraybuffer';
       dc.onmessage = (ev) => this.enqueue(ev.data);
-      dc.onerror = () => this.fail('datachannel_error', 'Transfer interrupted');
-      dc.onclose = () => {
-        if (!this.allDone()) this.fail('connection_interrupted', 'Transfer interrupted');
-      };
+      // The sender tears the connection down right after it flushes the final
+      // bytes, so both `error` (e.g. SCTP "User-Initiated Abort") and `close`
+      // can fire while buffered chunks / the `done` frame are still sitting in
+      // our async processing queue. Defer the completeness check to the end of
+      // that queue: finish() either completes (all bytes arrived) or fails only
+      // when data is genuinely missing — so normal teardown never looks like an
+      // interruption.
+      dc.onerror = () => this.settleOnTeardown();
+      dc.onclose = () => this.settleOnTeardown();
     };
+  }
+
+  /**
+   * Resolve a channel error/close by deferring to the end of the message queue,
+   * so any still-buffered chunks and the `done` frame are processed first. Only
+   * fails when the data is genuinely incomplete.
+   */
+  private settleOnTeardown(): void {
+    this.queue = this.queue.then(() => {
+      if (this.completed || this.cancelled) return;
+      return this.finish();
+    });
   }
 
   /** Append to the serial processing chain so messages are handled in order. */

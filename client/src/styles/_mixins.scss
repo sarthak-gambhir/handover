@@ -1,9 +1,11 @@
-@use 'tokens' as t;
+@use "tokens" as t;
 
 @mixin focus_ring {
   outline: none;
   &:focus-visible {
-    box-shadow: 0 0 0 2px t.$bg, 0 0 0 4px t.$accent;
+    box-shadow:
+      0 0 0 2px t.$bg,
+      0 0 0 4px t.$accent;
   }
 }
 

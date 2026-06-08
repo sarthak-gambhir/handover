@@ -1,4 +1,4 @@
-@use '../styles/mixins' as m;
+@use "../styles/mixins" as m;
 
 .member_row {
   display: flex;
@@ -50,11 +50,9 @@
 }
 
 .member_row_menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 10;
-  min-width: 140px;
+  position: fixed;
+  z-index: 50;
+  min-width: 160px;
   background: var(--bg_overlay);
   border: 1px solid var(--border_strong);
   border-radius: var(--radius_md);

@@ -1,0 +1,57 @@
+@use "../../styles/mixins" as m;
+
+.tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space_1);
+  padding: var(--space_1);
+  background: var(--bg_overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius_md);
+}
+
+.tabs_tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space_2);
+  flex: 1;
+  height: 34px;
+  padding: 0 var(--space_3);
+  border: none;
+  border-radius: var(--radius_sm);
+  background: transparent;
+  color: var(--fg_muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--duration_fast) var(--ease_out),
+    color var(--duration_fast) var(--ease_out);
+  @include m.focus_ring;
+
+  &:hover {
+    color: var(--fg);
+  }
+}
+
+.tabs_tab_active {
+  background: var(--bg_elevated);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.tabs_tab_badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent_soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}

@@ -1,4 +1,4 @@
-@use '../styles/mixins' as m;
+@use "../styles/mixins" as m;
 
 .waiting {
   max-width: 420px;
@@ -15,8 +15,15 @@
 }
 
 .waiting_icon {
+  display: inline-flex;
   color: var(--accent);
   animation: waiting_pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waiting_icon {
+    animation: none;
+  }
 }
 
 .waiting_title {

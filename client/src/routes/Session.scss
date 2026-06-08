@@ -1,4 +1,4 @@
-@use '../styles/mixins' as m;
+@use "../styles/mixins" as m;
 
 .session {
   display: flex;
@@ -13,116 +13,213 @@
   padding-top: var(--space_4);
 }
 
+.session_loading_grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space_4);
+
+  @include m.sm_up {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  }
+}
+
+// ---- app bar slot ----------------------------------------------------------
+
+.session_bar_identity {
+  display: none;
+
+  @include m.sm_up {
+    display: flex;
+    min-width: 0;
+  }
+}
+
+.session_identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space_3);
+  min-width: 0;
+}
+
+.session_bar_actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space_2);
+}
+
+.session_chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space_1);
+  max-width: 220px;
+  height: 30px;
+  padding: 0 var(--space_2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius_sm);
+  background: var(--bg_overlay);
+  color: var(--fg);
+  cursor: pointer;
+  @include m.mono_text;
+  font-size: 13px;
+  transition: border-color var(--duration_fast) var(--ease_out);
+  @include m.focus_ring;
+
+  &:hover {
+    border-color: var(--accent);
+  }
+
+  svg {
+    color: var(--fg_muted);
+    flex: none;
+  }
+}
+
+.session_chip_hash {
+  color: var(--fg_subtle);
+}
+
+.session_chip_text {
+  @include m.truncate;
+}
+
+// Bell + icon buttons in the bar.
+.session_bell,
+.session_iconbtn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border_strong);
+  border-radius: var(--radius_md);
+  background: var(--bg_overlay);
+  color: var(--fg);
+  cursor: pointer;
+  transition:
+    border-color var(--duration_fast) var(--ease_out),
+    background var(--duration_fast) var(--ease_out);
+  @include m.focus_ring;
+
+  &:hover {
+    border-color: var(--accent);
+  }
+}
+
+.session_bell_badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+
+// ---- popover content -------------------------------------------------------
+
+.session_pop {
+  padding: var(--space_3);
+}
+
+.session_pop_head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space_2);
+  margin-bottom: var(--space_2);
+}
+
+.session_pop_title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.session_pop_empty {
+  font-size: 13px;
+  color: var(--fg_muted);
+  padding: var(--space_2) 0;
+}
+
+.session_menu {
+  padding: var(--space_1);
+  min-width: 220px;
+}
+
+.session_menu_item {
+  display: flex;
+  align-items: center;
+  gap: var(--space_2);
+  width: 100%;
+  padding: var(--space_2) var(--space_3);
+  border: none;
+  border-radius: var(--radius_sm);
+  background: transparent;
+  color: var(--fg);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--bg_overlay);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  svg {
+    color: var(--fg_muted);
+    flex: none;
+  }
+}
+
+.session_menu_danger:not(:disabled) {
+  color: var(--danger);
+
+  svg {
+    color: var(--danger);
+  }
+}
+
+// ---- banners + mobile meta -------------------------------------------------
+
 .session_reconnecting {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space_2);
   padding: var(--space_2) var(--space_3);
   background: var(--bg_overlay);
   color: var(--warn);
   border: 1px solid var(--warn);
   border-radius: var(--radius_md);
   font-size: 0.875rem;
-  text-align: center;
 }
 
-.session_fatal {
-  max-width: 420px;
-  margin: 0 auto;
-  padding-top: var(--space_7);
-  text-align: center;
-}
-
-.session_header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space_3);
-  padding-bottom: var(--space_4);
-  border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
-}
-
-.session_header_info {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space_3);
-}
-
-.session_slug {
-  @include m.mono_text;
-  font-size: 18px;
-  color: var(--fg);
-}
-
-.session_count {
-  font-size: 13px;
-  color: var(--fg_muted);
-}
-
-.session_header_actions {
-  display: flex;
-  gap: var(--space_2);
-}
-
-.session_owner_panel {
-  width: 100%;
-}
-
-.session_owner_head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space_3);
-  margin-bottom: var(--space_3);
-  flex-wrap: wrap;
-}
-
-.session_owner_title {
-  display: flex;
-  align-items: center;
-  gap: var(--space_2);
-  font-size: 15px;
-}
-
-.session_owner_empty {
-  font-size: 13px;
-  color: var(--fg_muted);
-}
-
-.session_knock_list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space_2);
-}
-
-.session_grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space_4);
-
+// Identity strip in the body, shown only on small screens (the bar hides it).
+.session_meta {
   @include m.sm_up {
-    grid-template-columns: minmax(260px, 32%) 1fr;
-    align-items: start;
+    display: none;
   }
 }
 
-.session_section_title {
-  display: flex;
-  align-items: center;
-  gap: var(--space_2);
-  font-size: 14px;
-  color: var(--fg_muted);
-  margin-bottom: var(--space_3);
-  margin-top: var(--space_2);
-}
+// ---- tabs + panes ----------------------------------------------------------
 
-.session_bucket_head {
+.session_tabs {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space_3);
-  flex-wrap: wrap;
 
-  .session_section_title {
-    margin-bottom: 0;
+  @include m.sm_up {
+    display: none;
   }
 }
 
@@ -134,21 +231,89 @@
   gap: var(--space_2);
 }
 
-.session_members {
-  order: 2;
-
-  @include m.sm_up {
-    order: 1;
-  }
+.session_empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space_2);
+  padding: var(--space_5) var(--space_4);
 }
 
-.session_bucket {
-  order: 1;
+.session_empty_icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius_lg);
+  background: var(--accent_soft);
+  color: var(--accent);
+  margin-bottom: var(--space_1);
+}
+
+.session_empty_title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.session_empty_help {
+  font-size: 13px;
+  color: var(--fg_muted);
+  max-width: 320px;
+  line-height: 1.5;
+  margin-bottom: var(--space_2);
+}
+
+.session_empty_text {
+  font-size: 13px;
+  color: var(--fg_muted);
+}
+
+// The files panel keeps its dropzone + list spaced inside the panel body.
+.session_pane_files .panel_body {
   display: flex;
   flex-direction: column;
   gap: var(--space_4);
+}
 
-  @include m.sm_up {
-    order: 2;
+.session_rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_4);
+}
+
+// Cap the roster so a large session doesn't push everything else off-screen;
+// the member actions menu is portaled, so this scroll won't clip it.
+.session_pane_people .panel_body {
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+// Mobile: one pane at a time, driven by the active tab.
+@media (max-width: 639.98px) {
+  .session_rail {
+    display: contents;
+  }
+
+  .session_pane {
+    display: none;
+  }
+
+  .session_panes[data-tab="files"] .session_pane_files,
+  .session_panes[data-tab="people"] .session_pane_people,
+  .session_panes[data-tab="activity"] .session_pane_activity {
+    display: flex;
+  }
+}
+
+// Desktop: workspace + rail side by side, all panes visible.
+@include m.sm_up {
+  .session_panes {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    gap: var(--space_4);
+    align-items: start;
   }
 }

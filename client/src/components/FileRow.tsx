@@ -1,10 +1,10 @@
-import { FaDownload, FaTrashCan, FaFile } from 'react-icons/fa6';
-import { Badge } from './ui/Badge';
-import { Button } from './ui/Button';
-import type { PublicBucketEntry } from '../lib/api';
-import { formatBytes, relativeTime } from '../lib/format';
-import { cx } from '../lib/cx';
-import './FileRow.scss';
+import { RiDownloadLine, RiDeleteBin6Line, RiFileLine } from "react-icons/ri";
+import { Badge } from "./ui/Badge";
+import { Button } from "./ui/Button";
+import type { PublicBucketEntry } from "../lib/api";
+import { formatBytes, relativeTime } from "../lib/format";
+import { cx } from "../lib/cx";
+import "./FileRow.scss";
 
 interface FileRowProps {
   entry: PublicBucketEntry;
@@ -34,16 +34,22 @@ export function FileRow({
   const showDelete = canDelete ?? isYours;
   const uploading = progress !== undefined;
   return (
-    <li className={cx('file_row', justAdded && 'file_row_just_added')}>
-      <FaFile className="file_row_icon" size={18} />
+    <li className={cx("file_row", justAdded && "file_row_just_added")}>
+      <RiFileLine className="file_row_icon" size={18} />
       <div className="file_row_main">
         <span className="file_row_name" title={entry.name}>
           {entry.name}
         </span>
         <div className="file_row_meta">
           <span className="file_row_size">{formatBytes(entry.size)}</span>
-          <Badge variant={isYours ? 'accent' : 'neutral'}>{isYours ? 'you' : uploaderName}</Badge>
-          {!uploading && <span className="file_row_time">{relativeTime(entry.created_at)}</span>}
+          <Badge variant={isYours ? "accent" : "neutral"}>
+            {isYours ? "you" : uploaderName}
+          </Badge>
+          {!uploading && (
+            <span className="file_row_time">
+              {relativeTime(entry.created_at)}
+            </span>
+          )}
         </div>
         {uploading && (
           <div
@@ -54,7 +60,10 @@ export function FileRow({
             aria-valuemax={100}
             aria-valuenow={Math.round((progress ?? 0) * 100)}
           >
-            <div className="file_row_progress_bar" style={{ width: `${(progress ?? 0) * 100}%` }} />
+            <div
+              className="file_row_progress_bar"
+              style={{ width: `${(progress ?? 0) * 100}%` }}
+            />
           </div>
         )}
       </div>
@@ -71,13 +80,13 @@ export function FileRow({
               download={entry.name}
               aria-label={`Download ${entry.name}`}
             >
-              <FaDownload size={16} />
+              <RiDownloadLine size={16} />
             </a>
             {showDelete && (
               <Button
                 size="sm"
                 variant="ghost"
-                icon={<FaTrashCan size={16} />}
+                icon={<RiDeleteBin6Line size={16} />}
                 aria-label={`Delete ${entry.name}`}
                 onClick={() => onDelete(entry.id)}
               />
