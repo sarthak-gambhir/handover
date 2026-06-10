@@ -16,6 +16,8 @@ interface MemberRowProps {
   onKick: (member: PublicMember) => void;
   onMakeOwner: (member: PublicMember) => void;
   onDeleteUploads: (member: PublicMember) => void;
+  // While the session is frozen, only Kick stays available.
+  frozen?: boolean;
 }
 
 export function MemberRow({
@@ -26,6 +28,7 @@ export function MemberRow({
   onKick,
   onMakeOwner,
   onDeleteUploads,
+  frozen = false,
 }: MemberRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   // The menu is portaled to <body> so a scrollable roster can't clip it; we
@@ -95,7 +98,7 @@ export function MemberRow({
             size="sm"
             variant="ghost"
             icon={<RiSendPlane2Line size={16} />}
-            disabled={!canSend}
+            disabled={!canSend || frozen}
             onClick={() => onSend(member)}
             aria-label={`Send file to ${member.display_name}`}
           >
@@ -124,6 +127,7 @@ export function MemberRow({
                     <button
                       className="member_row_menu_item"
                       role="menuitem"
+                      disabled={frozen}
                       onClick={() => {
                         setMenuOpen(false);
                         onMakeOwner(member);
@@ -134,6 +138,7 @@ export function MemberRow({
                     <button
                       className="member_row_menu_item"
                       role="menuitem"
+                      disabled={frozen}
                       onClick={() => {
                         setMenuOpen(false);
                         onDeleteUploads(member);

@@ -12,6 +12,7 @@ export interface ServerToClient {
     your_user_id: string;
     owner_user_id: string;
     knocking_paused: boolean;
+    frozen: boolean;
     members: PublicMember[];
     bucket: PublicBucketEntry[];
   }) => void;
@@ -24,6 +25,7 @@ export interface ServerToClient {
   'knock:cancelled': (p: { knock_id: string }) => void;
   'knock:expired': (p: { knock_id: string }) => void;
   'knocking:paused': (p: { paused: boolean }) => void;
+  'session:frozen': (p: { frozen: boolean }) => void;
   waiting: (p: { knock_id: string }) => void;
   admitted: (p: {
     user_id: string;
@@ -58,6 +60,7 @@ export interface ClientToServer {
   reject: (p: { knock_id: string }) => void;
   kick: (p: { user_id: string }) => void;
   'knocking:set_paused': (p: { paused: boolean }) => void;
+  'session:set_frozen': (p: { frozen: boolean }) => void;
   transfer_ownership: (p: { to_user_id: string }) => void;
   owner_accept: () => void;
   owner_decline: () => void;

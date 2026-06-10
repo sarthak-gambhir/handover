@@ -82,6 +82,8 @@ export function Home() {
       const code = err instanceof ApiError ? err.code : "error";
       if (code === "session_not_found")
         toast("No session with that ID.", "danger");
+      else if (code === "session_frozen")
+        toast("This session is halted by the owner. Try again later.", "warn");
       else if (code === "knocking_paused")
         toast("The owner has paused new joins.", "warn");
       else if (code === "invalid_display_name")

@@ -299,4 +299,55 @@ describe('POST /api/sessions/:slug/knock', () => {
       .send({ display_name: 'Alice' });
     expect(res.status).toBe(423);
   });
+
+  it('423 session_frozen when the session is frozen', async () => {
+    const { slug, session } = newOwnerSession();
+    session.frozen = true;
+    const res = await request(server)
+      .post(`/api/sessions/${slug}/knock`)
+      .send({ display_name: 'Alice' });
+    expect(res.status).toBe(423);
+    expect(res.body.error).toBe('session_frozen');
+  });
+});
+
+describe('frozen session blocks data routes (423 session_frozen)', () => {
+  it('rejects upload, download, and delete while frozen', async () => {
+    const { slug, token, session } = newOwnerSession();
+
+    // Upload one file before freezing so we have something to fetch/delete.
+    const uploaded = await request(server)
+      .post(`/api/sessions/${slug}/files`)
+      .set('Cookie', cookieHeader(slug, token))
+      .attach('file', Buffer.from('hello'), 'a.txt');
+    expect(uploaded.status).toBe(201);
+    const fileId = uploaded.body.id as string;
+
+    session.frozen = true;
+
+    const upload = await request(server)
+      .post(`/api/sessions/${slug}/files`)
+      .set('Cookie', cookieHeader(slug, token))
+      .attach('file', Buffer.from('nope'), 'b.txt');
+    expect(upload.status).toBe(423);
+    expect(upload.body.error).toBe('session_frozen');
+
+    const download = await request(server)
+      .get(`/api/sessions/${slug}/files/${fileId}`)
+      .set('Cookie', cookieHeader(slug, token));
+    expect(download.status).toBe(423);
+    expect(download.body.error).toBe('session_frozen');
+
+    const del = await request(server)
+      .delete(`/api/sessions/${slug}/files/${fileId}`)
+      .set('Cookie', cookieHeader(slug, token));
+    expect(del.status).toBe(423);
+    expect(del.body.error).toBe('session_frozen');
+
+    const orphaned = await request(server)
+      .delete(`/api/sessions/${slug}/orphaned-files`)
+      .set('Cookie', cookieHeader(slug, token));
+    expect(orphaned.status).toBe(423);
+    expect(orphaned.body.error).toBe('session_frozen');
+  });
 });

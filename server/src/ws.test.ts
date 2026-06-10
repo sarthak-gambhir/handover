@@ -330,6 +330,84 @@ describe('ownership transfer requires a matching offer', () => {
   });
 });
 
+describe('session freeze ("halt all activity")', () => {
+  beforeEach(() => {
+    store.sessions.clear();
+    store.tokens.clear();
+  });
+
+  it('owner freeze broadcasts session:frozen and pauses knocking to the room', async () => {
+    const s = await setup();
+    const frozenA = once<{ frozen: boolean }>(s.A.sock, 'session:frozen');
+    const pausedA = once<{ paused: boolean }>(s.A.sock, 'knocking:paused');
+    s.O.sock.emit('session:set_frozen', { frozen: true });
+    expect((await frozenA).frozen).toBe(true);
+    expect((await pausedA).paused).toBe(true);
+    expect(s.session.frozen).toBe(true);
+    expect(s.session.knocking_paused).toBe(true);
+  });
+
+  it('a non-owner cannot freeze the session', async () => {
+    const s = await setup();
+    const err = once<{ code: string }>(s.A.sock, 'error');
+    s.A.sock.emit('session:set_frozen', { frozen: true });
+    expect((await err).code).toBe('owner_only');
+    expect(s.session.frozen).toBe(false);
+  });
+
+  it('a frozen session rejects transfer:request with session_frozen', async () => {
+    const s = await setup();
+    s.session.frozen = true;
+    const err = once<{ code: string }>(s.A.sock, 'error');
+    s.A.sock.emit('transfer:request', { to_user_id: s.B.id, files: [{ name: 'f', size: 1 }] });
+    expect((await err).code).toBe('session_frozen');
+  });
+
+  it('a frozen session rejects admit with session_frozen', async () => {
+    const s = await setup();
+    const knock = store.addKnocker(s.session, 'D').knocker;
+    s.session.frozen = true;
+    const err = once<{ code: string }>(s.O.sock, 'error');
+    s.O.sock.emit('admit', { knock_id: knock.knock_id });
+    expect((await err).code).toBe('session_frozen');
+  });
+
+  it('freezing cancels an in-flight transfer for both peers', async () => {
+    const s = await setup();
+    const transfer_id = await request(s);
+    await accept(s, transfer_id);
+    const cancelledA = once<{ reason: string }>(s.A.sock, 'transfer:cancelled');
+    const cancelledB = once<{ reason: string }>(s.B.sock, 'transfer:cancelled');
+    s.O.sock.emit('session:set_frozen', { frozen: true });
+    expect((await cancelledA).reason).toBe('session_frozen');
+    expect((await cancelledB).reason).toBe('session_frozen');
+    expect(s.session.transfers.get(transfer_id)?.state).toBe('cancelled');
+  });
+
+  it('the owner cannot resume knocking while frozen', async () => {
+    const s = await setup();
+    s.session.frozen = true;
+    s.session.knocking_paused = true;
+    const err = once<{ code: string }>(s.O.sock, 'error');
+    s.O.sock.emit('knocking:set_paused', { paused: false });
+    expect((await err).code).toBe('session_frozen');
+    expect(s.session.knocking_paused).toBe(true);
+  });
+
+  it('unfreezing leaves knocking paused for manual re-enable', async () => {
+    const s = await setup();
+    s.O.sock.emit('session:set_frozen', { frozen: true });
+    await once<{ paused: boolean }>(s.A.sock, 'knocking:paused');
+    expect(s.session.knocking_paused).toBe(true);
+
+    const unfrozen = once<{ frozen: boolean }>(s.A.sock, 'session:frozen');
+    s.O.sock.emit('session:set_frozen', { frozen: false });
+    expect((await unfrozen).frozen).toBe(false);
+    // Unfreezing must NOT auto-resume knocking.
+    expect(s.session.knocking_paused).toBe(true);
+  });
+});
+
 describe('one tab per session', () => {
   beforeEach(() => {
     store.sessions.clear();

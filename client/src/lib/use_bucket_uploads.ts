@@ -44,6 +44,7 @@ export function useBucketUploads(slug: string, yourUserId: string) {
               setUploads((prev) => prev.filter((u) => u.tempId !== tempId));
               if (err?.code === 'insufficient_storage') toast('Server is at capacity — try again in a minute.', 'warn');
               else if (err?.code === 'file_too_large') toast('That file is over the 100 MB limit.', 'warn');
+              else if (err?.code === 'session_frozen') toast('Session is frozen — uploads are paused.', 'warn');
               else if (err?.code === 'aborted') {/* silent */}
               else toast('Upload failed.', 'danger');
             });

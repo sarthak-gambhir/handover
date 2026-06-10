@@ -69,8 +69,13 @@
   font-size: 13px;
   color: var(--fg);
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--bg_elevated);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 }
 

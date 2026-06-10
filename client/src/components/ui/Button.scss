@@ -9,6 +9,7 @@
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
+  user-select: none;
   transition:
     background var(--duration_fast) var(--ease_out),
     border-color var(--duration_fast) var(--ease_out),

@@ -77,6 +77,7 @@ export class Store extends EventEmitter {
       last_activity: now,
       owner_disconnected_at: null,
       knocking_paused: false,
+      frozen: false,
       pending_owner_offer: null,
     };
 
@@ -341,6 +342,27 @@ export class Store extends EventEmitter {
       const other =
         transfer.from_user_id === user_id ? transfer.to_user_id : transfer.from_user_id;
       cancelled.push({ transfer, other_user_id: other });
+    }
+    return cancelled;
+  }
+
+  /** Cancel every non-terminal transfer in the session (used by freeze). */
+  cancelAllTransfers(
+    session: Session,
+  ): Array<{ transfer: TransferState; from_user_id: string; to_user_id: string }> {
+    const cancelled: Array<{
+      transfer: TransferState;
+      from_user_id: string;
+      to_user_id: string;
+    }> = [];
+    for (const transfer of session.transfers.values()) {
+      if (TERMINAL_STATES.has(transfer.state)) continue;
+      this.setTransferState(transfer, 'cancelled');
+      cancelled.push({
+        transfer,
+        from_user_id: transfer.from_user_id,
+        to_user_id: transfer.to_user_id,
+      });
     }
     return cancelled;
   }

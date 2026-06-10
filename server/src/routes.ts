@@ -37,6 +37,16 @@ const upload = multer({
   limits: { fileSize: config.maxFileBytes, files: 1 },
 });
 
+// Reject data-moving routes while the session is frozen ("compromised"). Must
+// run after requireMember/requireOwner so req.session is populated.
+function blockIfFrozen(req: Request, res: Response, next: NextFunction): void {
+  if (req.session?.frozen) {
+    res.status(423).json({ error: 'session_frozen' });
+    return;
+  }
+  next();
+}
+
 // ---- upload reservation lifecycle ---------------------------------------
 
 interface Reservation {
@@ -117,6 +127,10 @@ router.post('/sessions/:slug/knock', knockLimiter, (req: Request, res: Response)
     res.status(404).json({ error: 'session_not_found' });
     return;
   }
+  if (session.frozen) {
+    res.status(423).json({ error: 'session_frozen' });
+    return;
+  }
   if (session.knocking_paused) {
     res.status(423).json({ error: 'knocking_paused' });
     return;
@@ -167,6 +181,7 @@ router.get('/sessions/:slug', requireMember, (req: Request, res: Response) => {
     slug: session.slug,
     owner_user_id: session.owner_user_id,
     knocking_paused: session.knocking_paused,
+    frozen: session.frozen,
     you: store.publicMember(req.member!),
     members: store.publicMembers(session),
     bucket: store.publicBucket(session),
@@ -178,6 +193,7 @@ router.get('/sessions/:slug', requireMember, (req: Request, res: Response) => {
 router.post(
   '/sessions/:slug/files',
   requireMember,
+  blockIfFrozen,
   reserveUpload,
   (req: Request, res: Response, next: NextFunction) => {
     upload.single('file')(req, res, (err: unknown) => {
@@ -245,7 +261,7 @@ router.post(
 
 // ---- GET /api/sessions/:slug/files/:id (download) ------------------------
 
-router.get('/sessions/:slug/files/:id', requireMember, (req: Request, res: Response) => {
+router.get('/sessions/:slug/files/:id', requireMember, blockIfFrozen, (req: Request, res: Response) => {
   const session = req.session!;
   const entry = session.bucket.get(req.params.id);
   if (!entry) {
@@ -261,7 +277,7 @@ router.get('/sessions/:slug/files/:id', requireMember, (req: Request, res: Respo
 
 // ---- DELETE /api/sessions/:slug/files/:id --------------------------------
 
-router.delete('/sessions/:slug/files/:id', requireMember, (req: Request, res: Response) => {
+router.delete('/sessions/:slug/files/:id', requireMember, blockIfFrozen, (req: Request, res: Response) => {
   const session = req.session!;
   const entry = session.bucket.get(req.params.id);
   if (!entry) {
@@ -281,7 +297,7 @@ router.delete('/sessions/:slug/files/:id', requireMember, (req: Request, res: Re
 
 // ---- DELETE /api/sessions/:slug/orphaned-files (owner) -------------------
 
-router.delete('/sessions/:slug/orphaned-files', requireOwner, (req: Request, res: Response) => {
+router.delete('/sessions/:slug/orphaned-files', requireOwner, blockIfFrozen, (req: Request, res: Response) => {
   const session = req.session!;
   const ids = store.removeOrphanedFiles(session);
   for (const id of ids) emitToSession(session.slug, 'file:removed', { id });
@@ -293,6 +309,7 @@ router.delete('/sessions/:slug/orphaned-files', requireOwner, (req: Request, res
 router.delete(
   '/sessions/:slug/members/:userId/files',
   requireOwner,
+  blockIfFrozen,
   (req: Request, res: Response) => {
     const session = req.session!;
     const ids = store.removeFilesByUploader(session, req.params.userId);
@@ -323,6 +340,10 @@ router.get('/turn', (req: Request, res: Response) => {
   // valid member cookie, resolved via the `slug` query param.
   req.params.slug = normalizeSlug((req.query.slug as string) ?? '');
   requireMember(req, res, () => {
+    if (req.session?.frozen) {
+      res.status(423).json({ error: 'session_frozen' });
+      return;
+    }
     res.json({ iceServers: iceServers() });
   });
 });

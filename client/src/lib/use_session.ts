@@ -27,6 +27,7 @@ export function useSession(slug: string) {
   const [bucket, setBucket] = useState<PublicBucketEntry[]>([]);
   const [knockers, setKnockers] = useState<Knock[]>([]);
   const [knockingPaused, setKnockingPaused] = useState(false);
+  const [frozen, setFrozenState] = useState(false);
   const [yourUserId, setYourUserId] = useState('');
   const [ownerUserId, setOwnerUserId] = useState('');
   const [transfers, setTransfers] = useState<TransferVM[]>([]);
@@ -44,9 +45,37 @@ export function useSession(slug: string) {
   const outgoingQueue = useRef<Array<{ key: string; to_user_id: string }>>([]);
   const rateRef = useRef<Map<string, RateSample>>(new Map());
 
-  const { uploads, uploadFiles, deleteFile } = useBucketUploads(slug, yourUserId);
+  const {
+    uploads,
+    uploadFiles: rawUploadFiles,
+    deleteFile: rawDeleteFile,
+  } = useBucketUploads(slug, yourUserId);
 
   const isOwner = yourUserId !== '' && yourUserId === ownerUserId;
+
+  // While frozen the session is read-only; refuse mutating actions client-side
+  // (the server also rejects them with 423/session_frozen as a backstop).
+  const uploadFiles = useCallback(
+    (files: File[]) => {
+      if (frozen) {
+        toast('Session is frozen — uploads are paused.', 'warn');
+        return;
+      }
+      rawUploadFiles(files);
+    },
+    [frozen, rawUploadFiles, toast],
+  );
+  const deleteFile = useCallback(
+    async (id: string) => {
+      if (frozen) {
+        toast('Session is frozen — files are locked.', 'warn');
+        return;
+      }
+      await rawDeleteFile(id);
+    },
+    [frozen, rawDeleteFile, toast],
+  );
+
   const nameOf = useCallback(
     (uid: string) => members.find((m) => m.user_id === uid)?.display_name ?? 'Member',
     [members],
@@ -137,6 +166,7 @@ export function useSession(slug: string) {
       setYourUserId(p.your_user_id);
       setOwnerUserId(p.owner_user_id);
       setKnockingPaused(p.knocking_paused);
+      setFrozenState(p.frozen);
       setMembers(p.members);
       setBucket(p.bucket);
       sessionStore.set({ slug, user_id: p.your_user_id, is_owner: p.your_user_id === p.owner_user_id });
@@ -167,6 +197,7 @@ export function useSession(slug: string) {
     socket.on('knock:cancelled', (p) => setKnockers((prev) => prev.filter((k) => k.knock_id !== p.knock_id)));
     socket.on('knock:expired', (p) => setKnockers((prev) => prev.filter((k) => k.knock_id !== p.knock_id)));
     socket.on('knocking:paused', (p) => setKnockingPaused(p.paused));
+    socket.on('session:frozen', (p) => setFrozenState(p.frozen));
 
     socket.on('file:added', (p) => {
       setBucket((prev) => (prev.some((e) => e.id === p.entry.id) ? prev : [...prev, p.entry]));
@@ -318,6 +349,10 @@ export function useSession(slug: string) {
     (recipient: PublicMember, files: File[]) => {
       const socket = socketRef.current;
       if (!socket) return;
+      if (frozen) {
+        toast('Session is frozen — transfers are paused.', 'warn');
+        return;
+      }
       const key = randomId();
       filesRef.current.set(key, files);
       outgoingQueue.current.push({ key, to_user_id: recipient.user_id });
@@ -337,7 +372,7 @@ export function useSession(slug: string) {
       ]);
       socket.emit('transfer:request', { to_user_id: recipient.user_id, files: meta, client_ref: key });
     },
-    [],
+    [frozen, toast],
   );
 
   const acceptIncoming = useCallback(
@@ -406,10 +441,24 @@ export function useSession(slug: string) {
     [],
   );
   const setPaused = useCallback(
-    (paused: boolean) => socketRef.current?.emit('knocking:set_paused', { paused }),
+    (paused: boolean) => {
+      if (frozen) {
+        toast('Session is frozen — unfreeze it to manage knocking.', 'warn');
+        return;
+      }
+      socketRef.current?.emit('knocking:set_paused', { paused });
+    },
+    [frozen],
+  );
+  const setFrozen = useCallback(
+    (next: boolean) => socketRef.current?.emit('session:set_frozen', { frozen: next }),
     [],
   );
   const deleteOrphanedFiles = useCallback(async () => {
+    if (frozen) {
+      toast('Session is frozen — files are locked.', 'warn');
+      return;
+    }
     try {
       const { removed } = await api.deleteOrphanedFiles(slug);
       if (removed === 0) toast('No orphaned files to remove.', 'info');
@@ -417,16 +466,20 @@ export function useSession(slug: string) {
     } catch {
       toast('Could not remove orphaned files.', 'danger');
     }
-  }, [slug, toast]);
+  }, [frozen, slug, toast]);
   const deleteMemberFiles = useCallback(
     async (user_id: string) => {
+      if (frozen) {
+        toast('Session is frozen — files are locked.', 'warn');
+        return;
+      }
       try {
         await api.deleteMemberFiles(slug, user_id);
       } catch {
         toast('Could not remove that member’s files.', 'danger');
       }
     },
-    [slug, toast],
+    [frozen, slug, toast],
   );
   const acceptOwnership = useCallback(() => {
     socketRef.current?.emit('owner_accept');
@@ -484,6 +537,7 @@ export function useSession(slug: string) {
     bucket,
     knockers,
     knockingPaused,
+    frozen,
     yourUserId,
     ownerUserId,
     isOwner,
@@ -507,6 +561,7 @@ export function useSession(slug: string) {
     kick,
     makeOwner,
     setPaused,
+    setFrozen,
     deleteOrphanedFiles,
     deleteMemberFiles,
     deleteOwnUploads,

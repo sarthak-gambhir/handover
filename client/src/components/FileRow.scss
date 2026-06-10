@@ -89,3 +89,8 @@
     color: var(--fg);
   }
 }
+
+.file_row_download_disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}

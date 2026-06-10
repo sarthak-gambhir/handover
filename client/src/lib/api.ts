@@ -20,6 +20,7 @@ export interface Snapshot {
   slug: string;
   owner_user_id: string;
   knocking_paused: boolean;
+  frozen: boolean;
   you: PublicMember;
   members: PublicMember[];
   bucket: PublicBucketEntry[];

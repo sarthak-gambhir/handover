@@ -18,6 +18,8 @@ interface FileRowProps {
   canDelete?: boolean;
   progress?: number; // 0..1 while uploading; undefined when stored
   onCancelUpload?: () => void;
+  // When the session is frozen, downloads and deletes are locked.
+  frozen?: boolean;
 }
 
 export function FileRow({
@@ -30,8 +32,9 @@ export function FileRow({
   canDelete,
   progress,
   onCancelUpload,
+  frozen = false,
 }: FileRowProps) {
-  const showDelete = canDelete ?? isYours;
+  const showDelete = (canDelete ?? isYours) && !frozen;
   const uploading = progress !== undefined;
   return (
     <li className={cx("file_row", justAdded && "file_row_just_added")}>
@@ -75,10 +78,19 @@ export function FileRow({
         ) : (
           <>
             <a
-              className="file_row_download"
-              href={downloadUrl}
-              download={entry.name}
-              aria-label={`Download ${entry.name}`}
+              className={cx(
+                "file_row_download",
+                frozen && "file_row_download_disabled",
+              )}
+              href={frozen ? undefined : downloadUrl}
+              download={frozen ? undefined : entry.name}
+              aria-disabled={frozen || undefined}
+              aria-label={
+                frozen
+                  ? `Download ${entry.name} (locked while frozen)`
+                  : `Download ${entry.name}`
+              }
+              onClick={frozen ? (e) => e.preventDefault() : undefined}
             >
               <RiDownloadLine size={16} />
             </a>

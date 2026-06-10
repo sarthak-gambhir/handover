@@ -43,6 +43,19 @@ function denyOwnerAction(socket: AppSocket): void {
   socket.emit('error', { code: 'owner_only', message: 'owner action not permitted' });
 }
 
+// When the session is frozen ("compromised"), reject any activity that adds,
+// removes, or moves data. Returns true (and notifies the caller) when blocked.
+function frozenBlocked(socket: AppSocket): boolean {
+  const data = socket.data;
+  if (!data || data.role !== 'member') return false;
+  const session = store.getSession(data.slug);
+  if (session?.frozen) {
+    socket.emit('error', { code: 'session_frozen', message: 'session is frozen' });
+    return true;
+  }
+  return false;
+}
+
 // transfer:request rate limit — 20/min/sender (sliding window).
 const requestTimestamps = new Map<string, number[]>();
 function allowTransferRequest(user_id: string): boolean {
@@ -137,6 +150,9 @@ export function registerWs(io: Server): void {
     socket.on('reject', (p: { knock_id?: string }) => handleReject(io, socket, p));
     socket.on('kick', (p: { user_id?: string }) => handleKick(io, socket, p));
     socket.on('knocking:set_paused', (p: { paused?: boolean }) => handlePause(io, socket, p));
+    socket.on('session:set_frozen', (p: { frozen?: boolean }) =>
+      handleSetFrozen(io, socket, p),
+    );
     socket.on('transfer_ownership', (p: { to_user_id?: string }) =>
       handleOwnershipOffer(io, socket, p),
     );
@@ -258,6 +274,7 @@ function handleIdentify(
     your_user_id: member.user_id,
     owner_user_id: session.owner_user_id,
     knocking_paused: session.knocking_paused,
+    frozen: session.frozen,
     members: store.publicMembers(session),
     bucket: store.publicBucket(session),
   });
@@ -280,6 +297,7 @@ function getOwnerContext(
 }
 
 function handleAdmit(io: Server, socket: AppSocket, p: { knock_id?: string }): void {
+  if (frozenBlocked(socket)) return;
   const ctx = getOwnerContext(socket);
   if (!ctx) {
     denyOwnerAction(socket);
@@ -312,6 +330,7 @@ function handleAdmit(io: Server, socket: AppSocket, p: { knock_id?: string }): v
 }
 
 function handleReject(io: Server, socket: AppSocket, p: { knock_id?: string }): void {
+  if (frozenBlocked(socket)) return;
   const ctx = getOwnerContext(socket);
   if (!ctx) {
     denyOwnerAction(socket);
@@ -374,6 +393,9 @@ function handleKick(io: Server, socket: AppSocket, p: { user_id?: string }): voi
 // ---- owner: pause knocking -------------------------------------------------
 
 function handlePause(io: Server, socket: AppSocket, p: { paused?: boolean }): void {
+  // While frozen, knocking stays locked shut — the owner can't resume it until
+  // the session is unfrozen (and then must re-enable knocking manually).
+  if (frozenBlocked(socket)) return;
   const ctx = getOwnerContext(socket);
   if (!ctx) {
     denyOwnerAction(socket);
@@ -385,9 +407,48 @@ function handlePause(io: Server, socket: AppSocket, p: { paused?: boolean }): vo
   io.to(room(ctx.session.slug)).emit('knocking:paused', { paused: ctx.session.knocking_paused });
 }
 
+// ---- owner: freeze ("session compromised") ---------------------------------
+
+function handleSetFrozen(io: Server, socket: AppSocket, p: { frozen?: boolean }): void {
+  const ctx = getOwnerContext(socket);
+  if (!ctx) {
+    denyOwnerAction(socket);
+    return;
+  }
+  const { session } = ctx;
+  const next = Boolean(p.frozen);
+  const wasFrozen = session.frozen;
+  session.frozen = next;
+  store.touch(session);
+  io.to(room(session.slug)).emit('session:frozen', { frozen: next });
+
+  // Freezing also slams the door shut: cancel in-flight transfers and pause
+  // knocking. Resuming does NOT auto-reopen knocking — the owner re-enables it.
+  if (next && !wasFrozen) {
+    const cancelled = store.cancelAllTransfers(session);
+    for (const { transfer, from_user_id, to_user_id } of cancelled) {
+      emitTo(io, memberByUserId(session, from_user_id), 'transfer:cancelled', {
+        transfer_id: transfer.transfer_id,
+        by_user_id: ctx.owner.user_id,
+        reason: 'session_frozen',
+      });
+      emitTo(io, memberByUserId(session, to_user_id), 'transfer:cancelled', {
+        transfer_id: transfer.transfer_id,
+        by_user_id: ctx.owner.user_id,
+        reason: 'session_frozen',
+      });
+    }
+    if (!session.knocking_paused) {
+      session.knocking_paused = true;
+      io.to(room(session.slug)).emit('knocking:paused', { paused: true });
+    }
+  }
+}
+
 // ---- owner: transfer ownership ---------------------------------------------
 
 function handleOwnershipOffer(io: Server, socket: AppSocket, p: { to_user_id?: string }): void {
+  if (frozenBlocked(socket)) return;
   const ctx = getOwnerContext(socket);
   if (!ctx) {
     denyOwnerAction(socket);
@@ -411,6 +472,7 @@ function handleOwnershipOffer(io: Server, socket: AppSocket, p: { to_user_id?: s
 }
 
 function handleOwnerAccept(io: Server, socket: AppSocket): void {
+  if (frozenBlocked(socket)) return;
   const data = socket.data;
   if (!data || data.role !== 'member' || !data.user_id) return;
   const session = store.getSession(data.slug);
@@ -436,6 +498,7 @@ function handleOwnerAccept(io: Server, socket: AppSocket): void {
 }
 
 function handleOwnerDecline(io: Server, socket: AppSocket): void {
+  if (frozenBlocked(socket)) return;
   const data = socket.data;
   if (!data || data.role !== 'member' || !data.user_id) return;
   const session = store.getSession(data.slug);
@@ -467,6 +530,7 @@ function handleTransferRequest(
   socket: AppSocket,
   p: { to_user_id?: string; files?: TransferFileMeta[]; client_ref?: string },
 ): void {
+  if (frozenBlocked(socket)) return;
   const ctx = senderContext(socket);
   if (!ctx || !p.to_user_id) return;
   const { session, user_id } = ctx;
@@ -553,6 +617,7 @@ function handleTransferResponse(
   socket: AppSocket,
   p: { transfer_id?: string; accepted?: boolean },
 ): void {
+  if (frozenBlocked(socket)) return;
   const r = authorizeSignaling(socket, p.transfer_id, { actor: 'to', states: ['requested'] });
   if (!r) return;
   const { session, transfer } = r;
@@ -568,6 +633,7 @@ function handleTransferResponse(
 }
 
 function handleOffer(io: Server, socket: AppSocket, p: { transfer_id?: string; sdp?: unknown }): void {
+  if (frozenBlocked(socket)) return;
   const r = authorizeSignaling(socket, p.transfer_id, { actor: 'from', states: ['accepted'] });
   if (!r) return;
   if (p.sdp === undefined || approxBytes(p.sdp) > MAX_SDP_BYTES) {
@@ -585,6 +651,7 @@ function handleOffer(io: Server, socket: AppSocket, p: { transfer_id?: string; s
 }
 
 function handleAnswer(io: Server, socket: AppSocket, p: { transfer_id?: string; sdp?: unknown }): void {
+  if (frozenBlocked(socket)) return;
   const r = authorizeSignaling(socket, p.transfer_id, { actor: 'to', states: ['offering'] });
   if (!r) return;
   if (p.sdp === undefined || approxBytes(p.sdp) > MAX_SDP_BYTES) {
@@ -606,6 +673,7 @@ function handleIce(
   socket: AppSocket,
   p: { transfer_id?: string; candidate?: unknown },
 ): void {
+  if (frozenBlocked(socket)) return;
   const r = authorizeSignaling(socket, p.transfer_id, {
     actor: 'either',
     states: ['offering', 'answered'],
@@ -648,6 +716,7 @@ function handleTransferComplete(
   socket: AppSocket,
   p: { transfer_id?: string },
 ): void {
+  if (frozenBlocked(socket)) return;
   const r = authorizeSignaling(socket, p.transfer_id, { actor: 'either', states: ['answered'] });
   if (!r) return;
   const { session, transfer, user_id } = r;

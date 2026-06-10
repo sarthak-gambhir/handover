@@ -15,6 +15,9 @@ import {
   RiDeleteBin6Line,
   RiWifiOffLine,
   RiErrorWarningLine,
+  RiStopCircleLine,
+  RiPlayCircleLine,
+  RiShieldFlashLine,
 } from "react-icons/ri";
 import { useSession } from "../lib/use_session";
 import { useToast } from "../components/ui/Toast";
@@ -168,126 +171,116 @@ export function Session() {
 
   const ownerBadge = s.isOwner ? <Badge variant="accent">owner</Badge> : null;
 
-  const identity = (
-    <div className="session_identity">
-      {slugChip}
-      {ownerBadge}
-    </div>
-  );
+  const ownerMenu = s.isOwner ? (
+    <Popover
+      open={menuOpen}
+      onClose={() => setMenuOpen(false)}
+      label="Owner actions"
+      trigger={
+        <button
+          type="button"
+          className="session_iconbtn"
+          aria-label="Owner actions"
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((o) => !o)}
+        >
+          <RiMore2Fill size={18} />
+        </button>
+      }
+    >
+      <div className="session_menu" role="menu">
+        <button
+          type="button"
+          role="menuitem"
+          className="session_menu_item"
+          disabled={s.frozen}
+          title={
+            s.frozen
+              ? "Unfreeze the session to manage knocking"
+              : undefined
+          }
+          onClick={() => {
+            setMenuOpen(false);
+            s.setPaused(!s.knockingPaused);
+          }}
+        >
+          {s.knockingPaused ? (
+            <RiLockUnlockLine size={16} />
+          ) : (
+            <RiLockLine size={16} />
+          )}
+          {s.knockingPaused ? "Resume knocking" : "Pause knocking"}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className="session_menu_item session_menu_danger"
+          disabled={orphanedCount === 0 || s.frozen}
+          onClick={() => {
+            setMenuOpen(false);
+            setConfirmOrphaned(true);
+          }}
+        >
+          <RiDeleteBin6Line size={16} />
+          Delete orphaned
+          {orphanedCount > 0 ? ` (${orphanedCount})` : ""}
+        </button>
+      </div>
+    </Popover>
+  ) : null;
 
   const bar = (
-    <>
-      <div className="session_bar_identity">{identity}</div>
-      <div className="session_bar_actions">
+    <div className="session_bar_actions">
+      {s.isOwner && (
+        <button
+          type="button"
+          className="session_bell"
+          aria-label={
+            s.knockers.length > 0
+              ? `Knock queue, ${s.knockers.length} waiting`
+              : "Knock queue"
+          }
+          aria-haspopup="dialog"
+          aria-expanded={knockOpen}
+          onClick={() => setKnockOpen(true)}
+        >
+          <RiUserAddLine size={18} />
+          {s.knockers.length > 0 && (
+            <span className="session_bell_badge">{s.knockers.length}</span>
+          )}
+        </button>
+      )}
+
+      {s.isOwner && (
         <Button
           size="sm"
-          className="session_action_invite"
-          icon={<RiShareForwardLine size={16} />}
-          onClick={copyInvite}
+          variant={s.frozen ? "secondary" : "danger"}
+          className="session_action_freeze"
+          icon={
+            s.frozen ? (
+              <RiPlayCircleLine size={16} />
+            ) : (
+              <RiStopCircleLine size={16} />
+            )
+          }
+          aria-label={s.frozen ? "Resume activity" : "Halt all activity"}
+          title={s.frozen ? "Resume activity" : "Halt all activity"}
+          onClick={() => s.setFrozen(!s.frozen)}
         >
-          Invite
+          {s.frozen ? "Resume" : "Halt activity"}
         </Button>
+      )}
 
-        {s.isOwner && (
-          <button
-            type="button"
-            className="session_bell"
-            aria-label={
-              s.knockers.length > 0
-                ? `Knock queue, ${s.knockers.length} waiting`
-                : "Knock queue"
-            }
-            aria-haspopup="dialog"
-            aria-expanded={knockOpen}
-            onClick={() => setKnockOpen(true)}
-          >
-            <RiUserAddLine size={18} />
-            {s.knockers.length > 0 && (
-              <span className="session_bell_badge">{s.knockers.length}</span>
-            )}
-          </button>
-        )}
-
-        {s.isOwner && (
-          <Popover
-            open={menuOpen}
-            onClose={() => setMenuOpen(false)}
-            label="Owner actions"
-            trigger={
-              <button
-                type="button"
-                className="session_iconbtn"
-                aria-label="Owner actions"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                onClick={() => setMenuOpen((o) => !o)}
-              >
-                <RiMore2Fill size={18} />
-              </button>
-            }
-          >
-            <div className="session_menu" role="menu">
-              <button
-                type="button"
-                role="menuitem"
-                className="session_menu_item"
-                onClick={() => {
-                  setMenuOpen(false);
-                  s.setPaused(!s.knockingPaused);
-                }}
-              >
-                {s.knockingPaused ? (
-                  <RiLockUnlockLine size={16} />
-                ) : (
-                  <RiLockLine size={16} />
-                )}
-                {s.knockingPaused ? "Resume knocking" : "Pause knocking"}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="session_menu_item session_menu_danger"
-                disabled={orphanedCount === 0}
-                onClick={() => {
-                  setMenuOpen(false);
-                  setConfirmOrphaned(true);
-                }}
-              >
-                <RiDeleteBin6Line size={16} />
-                Delete orphaned
-                {orphanedCount > 0 ? ` (${orphanedCount})` : ""}
-              </button>
-              <div
-                role="separator"
-                className="session_menu_sep session_menu_sep_mobile"
-              />
-              <button
-                type="button"
-                role="menuitem"
-                className="session_menu_item session_menu_danger session_menu_leave"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onLeave();
-                }}
-              >
-                <RiLogoutBoxRLine size={16} />
-                Leave session
-              </button>
-            </div>
-          </Popover>
-        )}
-
-        <Button
-          size="sm"
-          variant="danger"
-          className={s.isOwner ? "session_action_leave" : undefined}
-          icon={<RiLogoutBoxRLine size={16} />}
-          onClick={onLeave}
-        >
-          Leave
-        </Button>
-      </div>
-    </>
+      <Button
+        size="sm"
+        variant="danger"
+        icon={<RiLogoutBoxRLine size={16} />}
+        onClick={onLeave}
+      >
+        Leave
+      </Button>
+    </div>
   );
 
   return (
@@ -304,6 +297,19 @@ export function Session() {
           </div>
         )}
 
+        {s.frozen && (
+          <div
+            className="session_frozen_banner"
+            role="status"
+            aria-live="polite"
+          >
+            <RiShieldFlashLine size={16} />
+            {s.isOwner
+              ? "Session frozen — read-only for everyone until you resume."
+              : "Session frozen by the owner — read-only until resumed."}
+          </div>
+        )}
+
         <div className="session_meta">
           {slugChip}
           <Button
@@ -314,8 +320,11 @@ export function Session() {
           >
             Invite
           </Button>
-          {ownerBadge && (
-            <span className="session_meta_owner">{ownerBadge}</span>
+          {s.isOwner && (
+            <div className="session_meta_right">
+              {ownerBadge}
+              {ownerMenu}
+            </div>
           )}
         </div>
 
@@ -346,7 +355,7 @@ export function Session() {
             icon={<RiFolder3Line size={16} />}
             count={s.bucket.length}
           >
-            <UploadDropzone onFiles={s.uploadFiles} />
+            <UploadDropzone onFiles={s.uploadFiles} disabled={s.frozen} />
 
             {filesEmpty ? (
               <div className="session_empty">
@@ -395,6 +404,7 @@ export function Session() {
                     justAdded={s.justAdded.has(e.id)}
                     downloadUrl={api.downloadUrl(cleanSlug, e.id)}
                     onDelete={s.deleteFile}
+                    frozen={s.frozen}
                   />
                 ))}
               </ul>
@@ -420,6 +430,7 @@ export function Session() {
                     onKick={setKickTarget}
                     onMakeOwner={setMakeOwnerTarget}
                     onDeleteUploads={setDeleteUploadsTarget}
+                    frozen={s.frozen}
                   />
                 ))}
               </ul>

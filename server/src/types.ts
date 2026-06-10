@@ -62,6 +62,10 @@ export type Session = {
   last_activity: number;
   owner_disconnected_at: number | null; // for owner grace
   knocking_paused: boolean;
+  // Owner-triggered "session compromised" freeze. When true the session is a
+  // read-only snapshot: uploads/downloads/deletes/transfers/knock admit are all
+  // rejected and in-flight transfers are cancelled.
+  frozen: boolean;
   // Outstanding ownership offer; only the named member may accept it, and only
   // while it has not expired. Null when no offer is in flight.
   pending_owner_offer: { to_user_id: string; from_user_id: string; created_at: number } | null;
