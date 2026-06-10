@@ -1,3 +1,5 @@
+@use "../styles/mixins" as m;
+
 .knock_queue_item {
   display: flex;
   align-items: center;
@@ -7,6 +9,24 @@
   border: 1px solid var(--border);
   border-radius: var(--radius_md);
   background: var(--bg);
+
+  &:hover {
+    background: var(--bg);
+    border-color: var(--accent);
+  }
+}
+
+.knock_queue_item_selected {
+  border-color: var(--accent);
+  background: var(--accent_soft);
+}
+
+.knock_queue_item_check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .knock_queue_item_info {
@@ -14,6 +34,8 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
+  cursor: pointer;
 }
 
 .knock_queue_item_name {
@@ -25,6 +47,11 @@
 .knock_queue_item_time {
   font-size: 12px;
   color: var(--fg_muted);
+}
+
+.knock_queue_item_id {
+  @include m.mono_text;
+  color: var(--fg_subtle);
 }
 
 .knock_queue_item_actions {

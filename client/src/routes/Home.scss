@@ -17,21 +17,18 @@
 }
 
 .home_title {
+  font-weight: 900;
   font-family: var(--font_display);
   font-size: clamp(40px, 9vw, 64px);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   line-height: 1;
   margin-bottom: var(--space_4);
-  background: linear-gradient(180deg, var(--fg) 30%, var(--fg_muted));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--fg);
 }
 
 .home_tagline {
   font-size: 16px;
   color: var(--fg);
-  max-width: 480px;
   margin: 0 auto var(--space_2);
   line-height: 1.5;
 }
@@ -39,7 +36,6 @@
 .home_subtitle {
   font-size: 13px;
   color: var(--fg_muted);
-  max-width: 440px;
   margin: 0 auto;
   line-height: 1.5;
 }
@@ -67,62 +63,45 @@
 }
 
 .home_steps {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  // Stacked on small screens; side-by-side once there's room.
+  flex-direction: column;
   gap: var(--space_3);
   list-style: none;
   padding: 0;
   margin: 0;
 
   @include m.sm_up {
-    grid-template-columns: repeat(3, 1fr);
+    flex-direction: row;
   }
 }
 
+// Each step is a horizontal row: number badge -> content -> trailing icon.
 .home_step {
-  position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: var(--space_3);
+  flex-direction: column;
+  gap: var(--space_4);
   padding: var(--space_4);
   background: var(--bg_elevated);
   border: 1px solid var(--border);
   border-radius: var(--radius_lg);
+
+  .home_step_header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space_4);
+  }
 }
 
-.home_step_icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex: none;
-  border-radius: var(--radius_md);
-  background: var(--accent_soft);
-  color: var(--accent);
-}
-
-.home_step_num {
-  position: absolute;
-  top: var(--space_3);
-  right: var(--space_4);
-  font-family: var(--font_display);
-  font-size: 14px;
-  color: var(--fg_subtle);
-  letter-spacing: 0.05em;
+.home_step_title {
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--fg);
 }
 
 .home_step_text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-
-  strong {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--fg);
-  }
-
   span {
     font-size: 13px;
     color: var(--fg_muted);
@@ -130,19 +109,37 @@
   }
 }
 
-.home_trust {
-  display: flex;
-  flex-wrap: wrap;
+.home_step_icon {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: var(--space_2) var(--space_4);
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius_md);
+  background: var(--accent_soft);
+  color: var(--accent);
+}
+
+.home_trust {
+  // Two-column grid on small screens; a centered single row once there's room.
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space_2) var(--space_6);
   list-style: none;
   padding: 0;
   margin: 0;
 
+  @include m.sm_up {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
   li {
     display: inline-flex;
     align-items: center;
-    gap: var(--space_1);
+    gap: var(--space_2);
     font-size: 12px;
     color: var(--fg_muted);
 

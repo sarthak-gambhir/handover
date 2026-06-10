@@ -123,35 +123,69 @@
   box-shadow: 0 0 0 2px var(--bg);
 }
 
+// Wider so the three leave actions fit on one row on larger screens.
+.session_leave_modal {
+  max-width: 520px;
+
+  // On larger screens, float Cancel to the left and group the two leave
+  // actions on the right: [Cancel] .... [Delete & leave] [Keep & leave].
+  // DOM order is [Keep, Delete, Cancel] (so the mobile stack reads naturally),
+  // so reorder via flex here.
+  @include m.sm_up {
+    .modal_footer {
+      > :nth-child(1) {
+        order: 3; // Keep & leave -> far right
+      }
+      > :nth-child(2) {
+        order: 2; // Delete & leave -> middle
+      }
+      > :nth-child(3) {
+        order: 1; // Cancel -> far left
+        margin-right: auto;
+      }
+    }
+  }
+}
+
 // ---- popover content -------------------------------------------------------
-
-.session_pop {
-  padding: var(--space_3);
-}
-
-.session_pop_head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space_2);
-  margin-bottom: var(--space_2);
-}
-
-.session_pop_title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--fg);
-}
-
-.session_pop_empty {
-  font-size: 13px;
-  color: var(--fg_muted);
-  padding: var(--space_2) 0;
-}
 
 .session_menu {
   padding: var(--space_1);
   min-width: 220px;
+}
+
+// Generic full-bleed divider for menu sections (spans the menu's padding).
+.session_menu_sep {
+  height: 1px;
+  margin: var(--space_1) calc(-1 * var(--space_1));
+  background: var(--border);
+}
+
+// Variant that only appears on small screens (e.g. above the mobile-only Leave).
+.session_menu_sep_mobile {
+  @include m.sm_up {
+    display: none;
+  }
+}
+
+// Leave lives in the owner menu on small screens (where the standalone Leave
+// button is hidden) and is removed from the menu once the bar has room for it.
+// Compound selector so this beats `.session_menu_item { display: flex }`
+// regardless of source order.
+.session_menu_item.session_menu_leave {
+  @include m.sm_up {
+    display: none;
+  }
+}
+
+// Owners get Leave in the menu on small screens, so hide the standalone button
+// there; show it again once there's room in the bar.
+.session_action_leave {
+  display: none;
+
+  @include m.sm_up {
+    display: inline-flex;
+  }
 }
 
 .session_menu_item {
@@ -208,8 +242,27 @@
 
 // Identity strip in the body, shown only on small screens (the bar hides it).
 .session_meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space_2);
+
   @include m.sm_up {
     display: none;
+  }
+}
+
+// On small screens the owner tag floats to the far right of the meta row.
+.session_meta_owner {
+  margin-left: auto;
+}
+
+// Invite lives beside the slug on small screens (in .session_meta), so hide the
+// app-bar copy there and only show it once the bar has room.
+.session_action_invite {
+  display: none;
+
+  @include m.sm_up {
+    display: inline-flex;
   }
 }
 
@@ -237,7 +290,7 @@
   align-items: center;
   text-align: center;
   gap: var(--space_2);
-  padding: var(--space_5) var(--space_4);
+  padding: var(--space_7) var(--space_4);
 }
 
 .session_empty_icon {
@@ -261,9 +314,8 @@
 .session_empty_help {
   font-size: 13px;
   color: var(--fg_muted);
-  max-width: 320px;
   line-height: 1.5;
-  margin-bottom: var(--space_2);
+  margin: var(--space_6) 0 var(--space_2);
 }
 
 .session_empty_text {

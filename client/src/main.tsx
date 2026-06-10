@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
-import "@fontsource/anton-sc/400.css";
+import "@fontsource-variable/lexend-deca";
 import App from "./App";
 import "./styles/index.scss";
 

@@ -1,6 +1,7 @@
 import { RiCheckLine, RiCloseLine } from "react-icons/ri";
 import { Button } from "./ui/Button";
-import { relativeTime } from "../lib/format";
+import { relativeTime, shortId } from "../lib/format";
+import { cx } from "../lib/cx";
 import "./KnockQueueItem.scss";
 
 export interface Knock {
@@ -13,17 +14,45 @@ export function KnockQueueItem({
   knock,
   onAdmit,
   onReject,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
 }: {
   knock: Knock;
   onAdmit: (id: string) => void;
   onReject: (id: string) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   return (
-    <li className="knock_queue_item">
-      <div className="knock_queue_item_info">
+    <li
+      className={cx(
+        "knock_queue_item",
+        selected && "knock_queue_item_selected",
+      )}
+    >
+      {selectable && (
+        <input
+          type="checkbox"
+          className="knock_queue_item_check"
+          checked={selected}
+          onChange={() => onToggleSelect?.(knock.knock_id)}
+          aria-label={`Select ${knock.display_name}`}
+        />
+      )}
+      <div
+        className="knock_queue_item_info"
+        onClick={
+          selectable ? () => onToggleSelect?.(knock.knock_id) : undefined
+        }
+      >
         <span className="knock_queue_item_name">{knock.display_name}</span>
         <span className="knock_queue_item_time">
-          knocked {relativeTime(knock.created_at)}
+          knocked {relativeTime(knock.created_at)} ·{" "}
+          <span className="knock_queue_item_id">
+            #{shortId(knock.knock_id)}
+          </span>
         </span>
       </div>
       <div className="knock_queue_item_actions">

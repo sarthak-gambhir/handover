@@ -9,6 +9,7 @@ import { api } from "../lib/api";
 import { createSocket } from "../lib/socket";
 import { sessionStore } from "../lib/sessionStore";
 import { normalizeSlug, sessionPath } from "../lib/slug";
+import { shortId } from "../lib/format";
 import "./Waiting.scss";
 
 export function Waiting() {
@@ -83,6 +84,13 @@ export function Waiting() {
               Session <span className="waiting_slug">{cleanSlug}</span>
               {displayName && <> · joining as {displayName}</>}
             </p>
+            {knockId && (
+              <p className="waiting_idline">
+                Your id{" "}
+                <span className="waiting_id">#{shortId(knockId)}</span> — share
+                it so the owner can find you.
+              </p>
+            )}
             <Button variant="ghost" onClick={onCancel}>
               Cancel
             </Button>

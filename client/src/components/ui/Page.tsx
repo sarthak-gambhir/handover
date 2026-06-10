@@ -8,14 +8,16 @@ interface PageProps {
   bar?: ReactNode;
   // Widen the content well (used by the Session workspace).
   wide?: boolean;
+  // Skip the app bar entirely (e.g. Home, which has its own hero brand).
+  hideAppBar?: boolean;
   className?: string;
   children: ReactNode;
 }
 
-export function Page({ bar, wide = false, className, children }: PageProps) {
+export function Page({ bar, wide = false, hideAppBar = false, className, children }: PageProps) {
   return (
     <div className="page">
-      <AppBar>{bar}</AppBar>
+      {!hideAppBar && <AppBar>{bar}</AppBar>}
       <main className={cx("page_main", wide && "page_main_wide", className)}>
         {children}
       </main>

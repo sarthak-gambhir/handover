@@ -40,6 +40,17 @@
   color: var(--fg);
 }
 
+.waiting_idline {
+  font-size: 13px;
+  color: var(--fg_muted);
+}
+
+.waiting_id {
+  @include m.mono_text;
+  color: var(--fg);
+  font-weight: 600;
+}
+
 @keyframes waiting_pulse {
   0%,
   100% {

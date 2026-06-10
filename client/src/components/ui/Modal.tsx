@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { RiCloseLine } from 'react-icons/ri';
 import { cx } from '../../lib/cx';
 import { useExitAnimation } from '../../lib/use_exit_animation';
 import './Modal.scss';
@@ -9,11 +10,24 @@ interface ModalProps {
   onClose: () => void;
   title?: ReactNode;
   locked?: boolean; // backdrop + Esc disabled; forces an explicit choice
+  className?: string; // extra class on the card (e.g. to widen it)
+  showClose?: boolean; // render a close (✕) button in the header
+  stackFooter?: boolean; // stack footer actions vertically (long/3+ buttons)
   children: ReactNode;
   footer?: ReactNode;
 }
 
-export function Modal({ open, onClose, title, locked = false, children, footer }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  locked = false,
+  className,
+  showClose = false,
+  stackFooter = false,
+  children,
+  footer,
+}: ModalProps) {
   const { mounted, exiting, ref } = useExitAnimation(open, 200);
   const cardRef = useRef<HTMLDivElement | null>(null);
   const lastFocused = useRef<HTMLElement | null>(null);
@@ -63,16 +77,43 @@ export function Modal({ open, onClose, title, locked = false, children, footer }
       }}
     >
       <div
-        className={cx('modal_card', locked && 'modal_card_locked', exiting && 'modal_card_exiting')}
+        className={cx(
+          'modal_card',
+          locked && 'modal_card_locked',
+          exiting && 'modal_card_exiting',
+          className,
+        )}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}
         aria-describedby={bodyId}
         ref={cardRef}
       >
-        {title && <h2 className="modal_title" id={titleId}>{title}</h2>}
+        {(title || (showClose && !locked)) && (
+          <div className="modal_head">
+            {title ? (
+              <h2 className="modal_title" id={titleId}>{title}</h2>
+            ) : (
+              <span />
+            )}
+            {showClose && !locked && (
+              <button
+                type="button"
+                className="modal_close"
+                aria-label="Close"
+                onClick={onClose}
+              >
+                <RiCloseLine size={20} />
+              </button>
+            )}
+          </div>
+        )}
         <div className="modal_body" id={bodyId}>{children}</div>
-        {footer && <div className="modal_footer">{footer}</div>}
+        {footer && (
+          <div className={cx('modal_footer', stackFooter && 'modal_footer_stack')}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body,

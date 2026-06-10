@@ -7,8 +7,9 @@ import {
   RiMore2Fill,
   RiLogoutBoxRLine,
   RiFolder3Line,
+  RiFile2Line,
   RiGroupLine,
-  RiExchangeLine,
+  RiArrowLeftRightLine,
   RiLockLine,
   RiLockUnlockLine,
   RiDeleteBin6Line,
@@ -21,7 +22,6 @@ import { Page } from "../components/ui/Page";
 import { Panel } from "../components/ui/Panel";
 import { Popover } from "../components/ui/Popover";
 import { Tabs } from "../components/ui/Tabs";
-import { PresenceStack } from "../components/ui/PresenceStack";
 import { StateScreen } from "../components/ui/StateScreen";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
@@ -30,7 +30,7 @@ import { Skeleton } from "../components/ui/Skeleton";
 import { MemberRow } from "../components/MemberRow";
 import { FileRow } from "../components/FileRow";
 import { UploadDropzone } from "../components/UploadDropzone";
-import { KnockQueueItem } from "../components/KnockQueueItem";
+import { KnockQueueModal } from "../components/KnockQueueModal";
 import { SendFileModal } from "../components/SendFileModal";
 import { IncomingTransferModal } from "../components/IncomingTransferModal";
 import { TransferProgressRow } from "../components/TransferProgressRow";
@@ -124,9 +124,7 @@ export function Session() {
           icon={<RiErrorWarningLine size={30} />}
           title="Session unavailable"
           helper={s.fatalMessage}
-          action={
-            <Button onClick={() => navigate("/")}>Back to home</Button>
-          }
+          action={<Button onClick={() => navigate("/")}>Back to home</Button>}
         />
       </Page>
     );
@@ -149,20 +147,25 @@ export function Session() {
   const onlineCount = s.members.filter((m) => m.online).length;
   const filesEmpty = s.bucket.length === 0 && s.uploads.length === 0;
 
+  const slugChip = (
+    <button
+      type="button"
+      className="session_chip"
+      onClick={copySlug}
+      title="Copy session ID"
+    >
+      <span className="session_chip_hash">#</span>
+      <span className="session_chip_text">{cleanSlug}</span>
+      <RiFileCopyLine size={14} />
+    </button>
+  );
+
+  const ownerBadge = s.isOwner ? <Badge variant="accent">owner</Badge> : null;
+
   const identity = (
     <div className="session_identity">
-      <button
-        type="button"
-        className="session_chip"
-        onClick={copySlug}
-        title="Copy session ID"
-      >
-        <span className="session_chip_hash">#</span>
-        <span className="session_chip_text">{cleanSlug}</span>
-        <RiFileCopyLine size={14} />
-      </button>
-      <PresenceStack members={s.members} />
-      {s.isOwner && <Badge variant="accent">owner</Badge>}
+      {slugChip}
+      {ownerBadge}
     </div>
   );
 
@@ -172,6 +175,7 @@ export function Session() {
       <div className="session_bar_actions">
         <Button
           size="sm"
+          className="session_action_invite"
           icon={<RiShareForwardLine size={16} />}
           onClick={copyInvite}
         >
@@ -179,53 +183,23 @@ export function Session() {
         </Button>
 
         {s.isOwner && (
-          <Popover
-            open={knockOpen}
-            onClose={() => setKnockOpen(false)}
-            label="Knock queue"
-            trigger={
-              <button
-                type="button"
-                className="session_bell"
-                aria-label={
-                  s.knockers.length > 0
-                    ? `Knock queue, ${s.knockers.length} waiting`
-                    : "Knock queue"
-                }
-                aria-haspopup="dialog"
-                aria-expanded={knockOpen}
-                onClick={() => setKnockOpen((o) => !o)}
-              >
-                <RiUserAddLine size={18} />
-                {s.knockers.length > 0 && (
-                  <span className="session_bell_badge">
-                    {s.knockers.length}
-                  </span>
-                )}
-              </button>
+          <button
+            type="button"
+            className="session_bell"
+            aria-label={
+              s.knockers.length > 0
+                ? `Knock queue, ${s.knockers.length} waiting`
+                : "Knock queue"
             }
+            aria-haspopup="dialog"
+            aria-expanded={knockOpen}
+            onClick={() => setKnockOpen(true)}
           >
-            <div className="session_pop">
-              <div className="session_pop_head">
-                <span className="session_pop_title">Knock queue</span>
-                {s.knockingPaused && <Badge variant="warn">paused</Badge>}
-              </div>
-              {s.knockers.length === 0 ? (
-                <p className="session_pop_empty">No one is waiting.</p>
-              ) : (
-                <ul className="session_knock_list">
-                  {s.knockers.map((k) => (
-                    <KnockQueueItem
-                      key={k.knock_id}
-                      knock={k}
-                      onAdmit={s.admit}
-                      onReject={s.reject}
-                    />
-                  ))}
-                </ul>
-              )}
-            </div>
-          </Popover>
+            <RiUserAddLine size={18} />
+            {s.knockers.length > 0 && (
+              <span className="session_bell_badge">{s.knockers.length}</span>
+            )}
+          </button>
         )}
 
         {s.isOwner && (
@@ -277,6 +251,22 @@ export function Session() {
                 Delete orphaned
                 {orphanedCount > 0 ? ` (${orphanedCount})` : ""}
               </button>
+              <div
+                role="separator"
+                className="session_menu_sep session_menu_sep_mobile"
+              />
+              <button
+                type="button"
+                role="menuitem"
+                className="session_menu_item session_menu_danger session_menu_leave"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onLeave();
+                }}
+              >
+                <RiLogoutBoxRLine size={16} />
+                Leave session
+              </button>
             </div>
           </Popover>
         )}
@@ -284,6 +274,7 @@ export function Session() {
         <Button
           size="sm"
           variant="danger"
+          className={s.isOwner ? "session_action_leave" : undefined}
           icon={<RiLogoutBoxRLine size={16} />}
           onClick={onLeave}
         >
@@ -307,7 +298,20 @@ export function Session() {
           </div>
         )}
 
-        <div className="session_meta">{identity}</div>
+        <div className="session_meta">
+          {slugChip}
+          <Button
+            size="sm"
+            className="session_meta_invite"
+            icon={<RiShareForwardLine size={16} />}
+            onClick={copyInvite}
+          >
+            Invite
+          </Button>
+          {ownerBadge && (
+            <span className="session_meta_owner">{ownerBadge}</span>
+          )}
+        </div>
 
         <Tabs
           className="session_tabs"
@@ -315,7 +319,11 @@ export function Session() {
           value={tab}
           onChange={(id) => setTab(id as SessionTab)}
           items={[
-            { id: "files", label: "Files", badge: s.bucket.length || undefined },
+            {
+              id: "files",
+              label: "Files",
+              badge: s.bucket.length || undefined,
+            },
             { id: "people", label: "People", badge: s.members.length },
             {
               id: "activity",
@@ -337,7 +345,7 @@ export function Session() {
             {filesEmpty ? (
               <div className="session_empty">
                 <span className="session_empty_icon">
-                  <RiFolder3Line size={26} />
+                  <RiFile2Line size={26} />
                 </span>
                 <p className="session_empty_title">No files yet</p>
                 <p className="session_empty_help">
@@ -414,7 +422,7 @@ export function Session() {
             <Panel
               className="session_pane session_pane_activity"
               title="Activity"
-              icon={<RiExchangeLine size={16} />}
+              icon={<RiArrowLeftRightLine size={16} />}
               count={s.transfers.length || undefined}
             >
               {s.transfers.length === 0 ? (
@@ -435,6 +443,17 @@ export function Session() {
           </div>
         </div>
       </div>
+
+      {s.isOwner && (
+        <KnockQueueModal
+          open={knockOpen}
+          onClose={() => setKnockOpen(false)}
+          knockers={s.knockers}
+          paused={s.knockingPaused}
+          onAdmit={s.admit}
+          onReject={s.reject}
+        />
+      )}
 
       <SendFileModal
         recipient={sendTarget}
@@ -578,11 +597,10 @@ export function Session() {
         open={confirmLeave}
         onClose={() => setConfirmLeave(false)}
         title="Leave the session?"
+        className="session_leave_modal"
+        stackFooter
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirmLeave(false)}>
-              Cancel
-            </Button>
             <Button
               variant="secondary"
               onClick={async () => {
@@ -601,6 +619,9 @@ export function Session() {
               }}
             >
               Delete my files & leave
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirmLeave(false)}>
+              Cancel
             </Button>
           </>
         }

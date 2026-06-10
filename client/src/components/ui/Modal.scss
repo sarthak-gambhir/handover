@@ -1,3 +1,5 @@
+@use "../../styles/mixins" as m;
+
 .modal_backdrop {
   position: fixed;
   inset: 0;
@@ -41,9 +43,40 @@
   border-color: var(--border_strong);
 }
 
+.modal_head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space_3);
+  margin-bottom: var(--space_4);
+}
+
 .modal_title {
   font-size: 17px;
-  margin-bottom: var(--space_4);
+}
+
+.modal_close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin: -4px -6px 0 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--fg_muted);
+  border-radius: var(--radius_md);
+  cursor: pointer;
+  transition: color var(--duration_fast) var(--ease_out),
+    background var(--duration_fast) var(--ease_out);
+  @include m.focus_ring;
+
+  &:hover {
+    color: var(--fg);
+    background: color-mix(in srgb, var(--fg) 8%, transparent);
+  }
 }
 
 .modal_body {
@@ -54,7 +87,32 @@
 
 .modal_footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space_2);
   margin-top: var(--space_5);
+}
+
+// For dialogs with 3+ or long-labelled actions: stack full-width buttons on
+// small screens so nothing overflows, but fall back to a normal right-aligned
+// row once there's horizontal room.
+.modal_footer_stack {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+
+  > * {
+    width: 100%;
+  }
+
+  @include m.sm_up {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+
+    > * {
+      width: auto;
+    }
+  }
 }

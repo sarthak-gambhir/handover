@@ -35,5 +35,5 @@ export function relativeTime(ts: number): string {
 
 /** Last 4 chars of a user_id for collision disambiguation. */
 export function shortId(userId: string): string {
-  return userId.replace(/-/g, '').slice(-4);
+  return userId.replace(/-/g, '').slice(-6);
 }

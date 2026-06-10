@@ -13,7 +13,7 @@ export function AppBar({ children }: AppBarProps) {
     <header className="app_bar">
       <div className="app_bar_inner">
         <Link className="app_bar_brand" to="/" aria-label="HandOver home">
-          <BrandMark className="app_bar_mark" size={22} />
+          <BrandMark className="app_bar_mark" size={32} />
           <span className="app_bar_wordmark">HandOver</span>
         </Link>
         {children && <div className="app_bar_slot">{children}</div>}

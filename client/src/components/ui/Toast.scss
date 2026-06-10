@@ -1,10 +1,12 @@
 .toast_stack {
   position: fixed;
-  top: var(--space_4);
+  bottom: var(--space_4);
   right: var(--space_4);
   z-index: 200;
   display: flex;
-  flex-direction: column;
+  // Anchor at the bottom-right and grow upward so toasts never reach the app
+  // bar; column-reverse keeps the newest toast nearest the corner.
+  flex-direction: column-reverse;
   gap: var(--space_2);
   max-width: 360px;
 }

@@ -52,10 +52,7 @@ export function MemberRow({
     if (!menuOpen) return;
     function onDocClick(e: MouseEvent) {
       const t = e.target as Node;
-      if (
-        !menuWrapRef.current?.contains(t) &&
-        !menuRef.current?.contains(t)
-      ) {
+      if (!menuWrapRef.current?.contains(t) && !menuRef.current?.contains(t)) {
         setMenuOpen(false);
       }
     }
@@ -92,8 +89,8 @@ export function MemberRow({
         {isYou && <Badge variant="accent">you</Badge>}
         {member.is_owner && <Badge variant="neutral">owner</Badge>}
       </div>
-      <div className="member_row_actions">
-        {!isYou && (
+      {!isYou && (
+        <div className="member_row_actions">
           <Button
             size="sm"
             variant="ghost"
@@ -104,63 +101,63 @@ export function MemberRow({
           >
             Send
           </Button>
-        )}
-        {canManage && (
-          <div className="member_row_menu_wrap" ref={menuWrapRef}>
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={<RiMore2Fill size={16} />}
-              aria-label="Member actions"
-              aria-haspopup="menu"
-              aria-expanded={menuOpen}
-              onClick={toggleMenu}
-            />
-            {menuOpen &&
-              menuPos &&
-              createPortal(
-                <div
-                  ref={menuRef}
-                  className="member_row_menu"
-                  role="menu"
-                  style={{ top: menuPos.top, right: menuPos.right }}
-                >
-                  <button
-                    className="member_row_menu_item"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onMakeOwner(member);
-                    }}
+          {canManage && (
+            <div className="member_row_menu_wrap" ref={menuWrapRef}>
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<RiMore2Fill size={16} />}
+                aria-label="Member actions"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={toggleMenu}
+              />
+              {menuOpen &&
+                menuPos &&
+                createPortal(
+                  <div
+                    ref={menuRef}
+                    className="member_row_menu"
+                    role="menu"
+                    style={{ top: menuPos.top, right: menuPos.right }}
                   >
-                    Make owner
-                  </button>
-                  <button
-                    className="member_row_menu_item"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onDeleteUploads(member);
-                    }}
-                  >
-                    Delete all uploads
-                  </button>
-                  <button
-                    className="member_row_menu_item member_row_menu_danger"
-                    role="menuitem"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onKick(member);
-                    }}
-                  >
-                    Kick
-                  </button>
-                </div>,
-                document.body,
-              )}
-          </div>
-        )}
-      </div>
+                    <button
+                      className="member_row_menu_item"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onMakeOwner(member);
+                      }}
+                    >
+                      Make owner
+                    </button>
+                    <button
+                      className="member_row_menu_item"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onDeleteUploads(member);
+                      }}
+                    >
+                      Delete all uploads
+                    </button>
+                    <button
+                      className="member_row_menu_item member_row_menu_danger"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onKick(member);
+                      }}
+                    >
+                      Kick
+                    </button>
+                  </div>,
+                  document.body,
+                )}
+            </div>
+          )}
+        </div>
+      )}
     </li>
   );
 }

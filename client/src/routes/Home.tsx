@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  RiAddLine,
-  RiDoorOpenLine,
+  RiChatNewLine,
+  RiChatUploadLine,
   RiFlashlightLine,
   RiShareForwardLine,
   RiUserFollowLine,
+  RiStackLine,
   RiGhostLine,
   RiP2pLine,
   RiShieldCheckLine,
@@ -95,7 +96,7 @@ export function Home() {
   }
 
   return (
-    <Page>
+    <Page hideAppBar>
       <div className="home">
         <header className="home_hero">
           <BrandMark className="home_mark" size={120} />
@@ -114,7 +115,7 @@ export function Home() {
           <Card
             className="home_card home_card_primary"
             title="Create a session"
-            helper="You become the owner and admit others by approving their knock."
+            helper="You create a new session and manage it. Admit others by approving their knock requests."
           >
             <form className="home_form" onSubmit={onCreate}>
               <Input
@@ -129,9 +130,9 @@ export function Home() {
                 type="submit"
                 loading={creating}
                 disabled={!ownerName.trim()}
-                icon={<RiAddLine size={18} />}
+                icon={<RiChatNewLine size={22} />}
               >
-                Create new session
+                Create
               </Button>
             </form>
           </Card>
@@ -163,7 +164,7 @@ export function Home() {
                 variant="secondary"
                 loading={knocking}
                 disabled={!slug.trim() || !name.trim()}
-                icon={<RiDoorOpenLine size={18} />}
+                icon={<RiChatUploadLine size={22} />}
               >
                 Knock
               </Button>
@@ -173,49 +174,52 @@ export function Home() {
 
         <ol className="home_steps" aria-label="How it works">
           <li className="home_step">
-            <span className="home_step_icon">
-              <RiFlashlightLine size={18} />
-            </span>
-            <span className="home_step_num">1</span>
+            <div className="home_step_header">
+              <span className="home_step_icon">
+                <RiFlashlightLine size={24} />
+              </span>
+              <div className="home_step_title">Create</div>
+            </div>
             <div className="home_step_text">
-              <strong>Create</strong>
-              <span>Start a session and become its owner.</span>
+              <span>Start a private session and become its owner.</span>
             </div>
           </li>
           <li className="home_step">
-            <span className="home_step_icon">
-              <RiShareForwardLine size={18} />
-            </span>
-            <span className="home_step_num">2</span>
+            <div className="home_step_header">
+              <span className="home_step_icon">
+                <RiUserFollowLine size={24} />
+              </span>
+              <div className="home_step_title">Invite</div>
+            </div>
             <div className="home_step_text">
-              <strong>Share</strong>
-              <span>Send the invite link or session ID.</span>
+              <span>Send the link or ID, then admit people as they knock.</span>
             </div>
           </li>
           <li className="home_step">
-            <span className="home_step_icon">
-              <RiUserFollowLine size={18} />
-            </span>
-            <span className="home_step_num">3</span>
+            <div className="home_step_header">
+              <span className="home_step_icon">
+                <RiShareForwardLine size={24} />
+              </span>
+              <div className="home_step_title">Share</div>
+            </div>
             <div className="home_step_text">
-              <strong>Admit</strong>
-              <span>Approve people as they knock.</span>
+              <span>Drop files to hand them to everyone in the room.</span>
             </div>
           </li>
         </ol>
 
         <ul className="home_trust" aria-label="What makes it private">
           <li>
-            <RiGhostLine size={16} /> In-memory
+            <RiStackLine size={20} /> In-memory
           </li>
           <li>
-            <RiShieldCheckLine size={16} /> Owner-gated
+            <RiShieldCheckLine size={20} /> Owner-gated
           </li>
           <li>
-            <RiP2pLine size={16} /> Peer-to-peer
+            <RiP2pLine size={20} /> Peer-to-peer
           </li>
           <li>
-            <RiGhostLine size={16} /> Nothing stored
+            <RiGhostLine size={20} /> Nothing stored
           </li>
         </ul>
       </div>
