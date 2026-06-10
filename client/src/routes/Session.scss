@@ -147,6 +147,69 @@
   }
 }
 
+.session_owner_leave_modal {
+  max-width: 520px;
+
+  // Same footer treatment as the leave modal: [Cancel] .... [Transfer] [End].
+  // DOM order is [Transfer, End, Cancel] so the mobile stack reads top-down.
+  @include m.sm_up {
+    .modal_footer {
+      > :nth-child(1) {
+        order: 2; // Transfer ownership -> middle
+      }
+      > :nth-child(2) {
+        order: 3; // End session -> far right
+      }
+      > :nth-child(3) {
+        order: 1; // Cancel -> far left
+        margin-right: auto;
+      }
+    }
+  }
+}
+
+.session_transfer_list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.session_transfer_pick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space_3);
+  width: 100%;
+  padding: var(--space_2) var(--space_3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius_md);
+  background: var(--bg_overlay);
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--accent);
+  }
+
+  @include m.focus_ring;
+}
+
+.session_transfer_pick_name {
+  @include m.truncate;
+  font-weight: 500;
+}
+
+.session_transfer_pick_id {
+  @include m.mono_text;
+  flex: none;
+  color: var(--fg_muted);
+  font-size: 12px;
+}
+
 // ---- popover content -------------------------------------------------------
 
 .session_menu {

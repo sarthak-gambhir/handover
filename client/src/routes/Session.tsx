@@ -38,6 +38,7 @@ import { sessionStore } from "../lib/sessionStore";
 import { normalizeSlug, sessionPath } from "../lib/slug";
 import { api } from "../lib/api";
 import type { PublicMember } from "../lib/api";
+import { shortId } from "../lib/format";
 import "./Session.scss";
 
 type SessionTab = "files" | "people" | "activity";
@@ -57,6 +58,8 @@ export function Session() {
     useState<PublicMember | null>(null);
   const [confirmOrphaned, setConfirmOrphaned] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmOwnerLeave, setConfirmOwnerLeave] = useState(false);
+  const [ownerTransferPick, setOwnerTransferPick] = useState(false);
   const [knockOpen, setKnockOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [tab, setTab] = useState<SessionTab>("files");
@@ -68,6 +71,7 @@ export function Session() {
   const ownUploadCount = s.bucket.filter(
     (e) => e.uploader_id === s.yourUserId,
   ).length;
+  const otherMembers = s.members.filter((m) => m.user_id !== s.yourUserId);
 
   // Warn before leaving with active work.
   useEffect(() => {
@@ -107,13 +111,15 @@ export function Session() {
   }
 
   async function onLeave() {
-    // A non-owner who has uploads is asked whether to delete them first; the
-    // owner leaving ends the whole session, so there's nothing to orphan.
-    if (!s.isOwner && ownUploadCount > 0) {
-      setConfirmLeave(true);
+    // The owner leaving ends the session for everyone, so offer to hand it off
+    // to another member or end it outright.
+    if (s.isOwner) {
+      setConfirmOwnerLeave(true);
       return;
     }
-    await performLeave();
+    // Non-owners always confirm before leaving; the dialog additionally asks
+    // about their uploads when they have files in the bucket.
+    setConfirmLeave(true);
   }
 
   if (s.status === "fatal") {
@@ -597,38 +603,136 @@ export function Session() {
         open={confirmLeave}
         onClose={() => setConfirmLeave(false)}
         title="Leave the session?"
-        className="session_leave_modal"
+        className={ownUploadCount > 0 ? "session_leave_modal" : undefined}
+        stackFooter={ownUploadCount > 0}
+        footer={
+          ownUploadCount > 0 ? (
+            <>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  setConfirmLeave(false);
+                  await performLeave();
+                }}
+              >
+                Keep files & leave
+              </Button>
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  setConfirmLeave(false);
+                  await s.deleteOwnUploads();
+                  await performLeave();
+                }}
+              >
+                Delete my files & leave
+              </Button>
+              <Button variant="ghost" onClick={() => setConfirmLeave(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={() => setConfirmLeave(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  setConfirmLeave(false);
+                  await performLeave();
+                }}
+              >
+                Leave
+              </Button>
+            </>
+          )
+        }
+      >
+        {ownUploadCount > 0 ? (
+          <>
+            You have {ownUploadCount} file{ownUploadCount === 1 ? "" : "s"} in
+            the shared bucket. If you keep them, they’ll stay for the others
+            until the owner removes them.
+          </>
+        ) : (
+          <>
+            You’ll be removed from the session and lose access to the shared
+            bucket. You can rejoin later by knocking again.
+          </>
+        )}
+      </Modal>
+
+      <Modal
+        open={confirmOwnerLeave}
+        onClose={() => setConfirmOwnerLeave(false)}
+        title="Leave the session?"
+        className="session_owner_leave_modal"
         stackFooter
         footer={
           <>
             <Button
               variant="secondary"
-              onClick={async () => {
-                setConfirmLeave(false);
-                await performLeave();
+              disabled={otherMembers.length === 0}
+              onClick={() => {
+                setConfirmOwnerLeave(false);
+                setOwnerTransferPick(true);
               }}
             >
-              Keep files & leave
+              Transfer ownership
             </Button>
             <Button
               variant="danger"
               onClick={async () => {
-                setConfirmLeave(false);
-                await s.deleteOwnUploads();
+                setConfirmOwnerLeave(false);
                 await performLeave();
               }}
             >
-              Delete my files & leave
+              End session
             </Button>
-            <Button variant="ghost" onClick={() => setConfirmLeave(false)}>
+            <Button variant="ghost" onClick={() => setConfirmOwnerLeave(false)}>
               Cancel
             </Button>
           </>
         }
       >
-        You have {ownUploadCount} file{ownUploadCount === 1 ? "" : "s"} in the
-        shared bucket. If you keep them, they’ll stay for the others until the
-        owner removes them.
+        You’re the owner. Hand the session to another member to keep it running,
+        or end it for everyone.
+        {otherMembers.length === 0 &&
+          " There’s no one else here yet, so it can only be ended."}
+      </Modal>
+
+      <Modal
+        open={ownerTransferPick}
+        onClose={() => setOwnerTransferPick(false)}
+        title="Transfer ownership to…"
+        showClose
+      >
+        <ul className="session_transfer_list">
+          {otherMembers.map((m) => (
+            <li key={m.user_id}>
+              <button
+                type="button"
+                className="session_transfer_pick"
+                onClick={() => {
+                  s.makeOwner(m.user_id);
+                  setOwnerTransferPick(false);
+                  toast(
+                    `Ownership offer sent to ${m.display_name}. They’ll take over once they accept.`,
+                    "info",
+                  );
+                }}
+              >
+                <span className="session_transfer_pick_name">
+                  {m.display_name}
+                </span>
+                <span className="session_transfer_pick_id">
+                  #{shortId(m.user_id)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       </Modal>
     </Page>
   );
