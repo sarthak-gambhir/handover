@@ -34,11 +34,12 @@ import { MemberRow } from "../components/MemberRow";
 import { FileRow } from "../components/FileRow";
 import { UploadDropzone } from "../components/UploadDropzone";
 import { KnockQueueModal } from "../components/KnockQueueModal";
+import { InviteModal } from "../components/InviteModal";
 import { SendFileModal } from "../components/SendFileModal";
 import { IncomingTransferModal } from "../components/IncomingTransferModal";
 import { TransferProgressRow } from "../components/TransferProgressRow";
 import { sessionStore } from "../lib/sessionStore";
-import { normalizeSlug, sessionPath } from "../lib/slug";
+import { normalizeSlug } from "../lib/slug";
 import { api } from "../lib/api";
 import type { PublicMember } from "../lib/api";
 import { shortId } from "../lib/format";
@@ -88,15 +89,7 @@ export function Session() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [s.hasActiveWork]);
 
-  async function copyInvite() {
-    const url = `${window.location.origin}${sessionPath(cleanSlug)}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast("Invite link copied.", "success");
-    } catch {
-      toast(url, "info");
-    }
-  }
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   async function copySlug() {
     try {
@@ -312,14 +305,16 @@ export function Session() {
 
         <div className="session_meta">
           {slugChip}
-          <Button
-            size="sm"
-            className="session_meta_invite"
-            icon={<RiShareForwardLine size={16} />}
-            onClick={copyInvite}
-          >
-            Invite
-          </Button>
+          {s.isOwner && (
+            <Button
+              size="sm"
+              className="session_meta_invite"
+              icon={<RiShareForwardLine size={16} />}
+              onClick={() => setInviteOpen(true)}
+            >
+              Invite
+            </Button>
+          )}
           {s.isOwner && (
             <div className="session_meta_right">
               {ownerBadge}
@@ -373,7 +368,7 @@ export function Session() {
                     size="sm"
                     variant="secondary"
                     icon={<RiShareForwardLine size={16} />}
-                    onClick={copyInvite}
+                    onClick={() => setInviteOpen(true)}
                   >
                     Copy invite link
                   </Button>
@@ -469,6 +464,16 @@ export function Session() {
           paused={s.knockingPaused}
           onAdmit={s.admit}
           onReject={s.reject}
+        />
+      )}
+
+      {s.isOwner && (
+        <InviteModal
+          open={inviteOpen}
+          onClose={() => setInviteOpen(false)}
+          slug={cleanSlug}
+          frozen={s.frozen}
+          usedSignal={s.inviteUsed}
         />
       )}
 

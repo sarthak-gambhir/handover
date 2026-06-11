@@ -24,6 +24,7 @@ export interface ServerToClient {
   'knock:new': (p: { knock_id: string; display_name: string; created_at: number }) => void;
   'knock:cancelled': (p: { knock_id: string }) => void;
   'knock:expired': (p: { knock_id: string }) => void;
+  'invite:used': (p: { code: string; user_id: string; display_name: string }) => void;
   'knocking:paused': (p: { paused: boolean }) => void;
   'session:frozen': (p: { frozen: boolean }) => void;
   waiting: (p: { knock_id: string }) => void;

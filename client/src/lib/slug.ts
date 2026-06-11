@@ -12,3 +12,8 @@ export function sessionPath(slug: string): string {
 export function waitingPath(slug: string, knockId: string): string {
   return `/w/${normalizeSlug(slug)}?k=${encodeURIComponent(knockId)}`;
 }
+
+/** Build the single-use invite URL. */
+export function invitePath(slug: string, code: string): string {
+  return `/j/${normalizeSlug(slug)}?invite=${encodeURIComponent(code)}`;
+}

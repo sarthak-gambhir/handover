@@ -1,0 +1,46 @@
+@use "../styles/mixins" as m;
+
+.invite {
+  max-width: 420px;
+  margin: 0 auto;
+  padding-top: var(--space_7);
+}
+
+.invite_body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_3);
+}
+
+.invite_head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space_2);
+}
+
+.invite_icon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.invite_title {
+  font-size: 17px;
+}
+
+.invite_meta {
+  font-size: 13px;
+  color: var(--fg_muted);
+}
+
+.invite_slug {
+  @include m.mono_text;
+  color: var(--fg);
+}
+
+.invite_warn {
+  font-size: 13px;
+  color: var(--warn);
+  text-align: center;
+}

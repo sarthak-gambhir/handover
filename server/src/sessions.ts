@@ -5,6 +5,7 @@ import {
   type Session,
   type Member,
   type Knocker,
+  type Invite,
   type BucketEntry,
   type TransferState,
   type TransferStateName,
@@ -71,6 +72,7 @@ export class Store extends EventEmitter {
       owner_user_id: ownerUserId,
       members: new Map([[ownerUserId, owner]]),
       knockers: new Map(),
+      invites: new Map(),
       bucket: new Map(),
       transfers: new Map(),
       total_bytes: 0,
@@ -144,18 +146,17 @@ export class Store extends EventEmitter {
     return knocker;
   }
 
-  /** Upgrade a pending knocker into a member; reuses the same token. */
-  admitKnocker(session: Session, knock_id: string): Member | undefined {
-    const knocker = session.knockers.get(knock_id);
-    if (!knocker) return undefined;
-    session.knockers.delete(knock_id);
-
+  /**
+   * Create a non-owner member bound to `token`, register the token as a member
+   * entry, and add them to the roster. Shared by knock-admit and invite-redeem.
+   */
+  private makeMember(session: Session, displayName: string, token: string): Member {
     const user_id = randomUUID();
     const now = Date.now();
     const member: Member = {
       user_id,
-      display_name: knocker.display_name,
-      session_token: knocker.session_token,
+      display_name: displayName,
+      session_token: token,
       tab_id: null,
       socket_id: null,
       is_owner: false,
@@ -164,9 +165,8 @@ export class Store extends EventEmitter {
       offline_grace_timer: null,
     };
     session.members.set(user_id, member);
-    // Upgrade the token entry from pending -> member.
-    this.tokens.set(knocker.session_token, {
-      token: knocker.session_token,
+    this.tokens.set(token, {
+      token,
       slug: session.slug,
       status: 'member',
       user_id,
@@ -174,6 +174,77 @@ export class Store extends EventEmitter {
     });
     this.touch(session);
     return member;
+  }
+
+  /** Upgrade a pending knocker into a member; reuses the same token. */
+  admitKnocker(session: Session, knock_id: string): Member | undefined {
+    const knocker = session.knockers.get(knock_id);
+    if (!knocker) return undefined;
+    session.knockers.delete(knock_id);
+    // Reuse the pending token, upgrading its index entry pending -> member.
+    return this.makeMember(session, knocker.display_name, knocker.session_token);
+  }
+
+  // ---- invites -----------------------------------------------------------
+
+  /** Prune invites that are past their expiry. */
+  private pruneInvites(session: Session, now = Date.now()): void {
+    for (const [code, invite] of session.invites) {
+      if (invite.expires_at <= now) session.invites.delete(code);
+    }
+  }
+
+  /**
+   * Mint a single-use invite code. Returns null if the session already has
+   * `inviteCap` live invites. The owner shares the code; redeeming it admits a
+   * member directly with no knock.
+   */
+  createInvite(session: Session): Invite | null {
+    const now = Date.now();
+    this.pruneInvites(session, now);
+    if (session.invites.size >= config.inviteCap) return null;
+    const invite: Invite = {
+      code: newToken(),
+      created_at: now,
+      expires_at: now + config.inviteTtlMs,
+    };
+    session.invites.set(invite.code, invite);
+    this.touch(session);
+    return invite;
+  }
+
+  /** Active (non-expired) invites, newest first. Prunes expired entries. */
+  listInvites(session: Session, now = Date.now()): Invite[] {
+    this.pruneInvites(session, now);
+    return [...session.invites.values()].sort((a, b) => b.created_at - a.created_at);
+  }
+
+  /** Revoke a specific invite code. Returns true if one was removed. */
+  revokeInvite(session: Session, code: string): boolean {
+    const removed = session.invites.delete(code);
+    if (removed) this.touch(session);
+    return removed;
+  }
+
+  /**
+   * Redeem an invite code: consume it (single-use) and create a fresh member
+   * with a new member token. Returns undefined if the code is missing/expired.
+   */
+  redeemInvite(
+    session: Session,
+    code: string,
+    displayName: string,
+  ): { member: Member; token: string } | undefined {
+    const invite = session.invites.get(code);
+    if (!invite || invite.expires_at <= Date.now()) {
+      // Drop a stale entry if we happened to find one.
+      if (invite) session.invites.delete(code);
+      return undefined;
+    }
+    session.invites.delete(code); // single-use
+    const token = newToken();
+    const member = this.makeMember(session, displayName, token);
+    return { member, token };
   }
 
   // ---- members -----------------------------------------------------------
@@ -455,6 +526,8 @@ export class Store extends EventEmitter {
         session.pending_owner_offer = null;
         this.emit('owner_offer:expired', { slug: session.slug, to_user_id, from_user_id });
       }
+      // Invite TTL — drop expired single-use codes.
+      this.pruneInvites(session, now);
       // Knock TTL.
       for (const knocker of [...session.knockers.values()]) {
         if (now - knocker.created_at > config.knockTtlMs) {

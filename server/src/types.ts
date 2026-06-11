@@ -18,6 +18,12 @@ export type Member = {
   offline_grace_timer?: ReturnType<typeof setTimeout> | null;
 };
 
+export type Invite = {
+  code: string; // random base64url token, used as the map key
+  created_at: number;
+  expires_at: number; // single-use; also pruned by the sweeper once past this
+};
+
 export type BucketEntry = {
   id: string; // random 16-byte hex
   name: string; // canonicalised filename
@@ -56,6 +62,7 @@ export type Session = {
   owner_user_id: string;
   members: Map<string, Member>; // by user_id
   knockers: Map<string, Knocker>; // by knock_id
+  invites: Map<string, Invite>; // single-use invite codes, by code
   bucket: Map<string, BucketEntry>; // by file id
   transfers: Map<string, TransferState>; // by transfer_id
   total_bytes: number;

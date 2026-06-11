@@ -189,6 +189,17 @@ describe('Store — sweeper', () => {
     expect(events).toContain(knocker.knock_id);
   });
 
+  it('drops invites past their expiry', () => {
+    const store = new Store();
+    const { session } = store.createSession();
+    const invite = store.createInvite(session)!;
+    const now = Date.now();
+    session.last_activity = now;
+    invite.expires_at = now - 1000;
+    store.sweep(now);
+    expect(session.invites.size).toBe(0);
+  });
+
   it('moves hung transfers to expired per-state and emits transfer:expired', () => {
     const store = new Store();
     const { session, ownerUserId } = store.createSession();

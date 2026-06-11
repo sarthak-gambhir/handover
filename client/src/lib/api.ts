@@ -16,6 +16,12 @@ export interface PublicBucketEntry {
   created_at: number;
 }
 
+export interface InviteSummary {
+  code: string;
+  created_at: number;
+  expires_at: number;
+}
+
 export interface Snapshot {
   slug: string;
   owner_user_id: string;
@@ -75,6 +81,33 @@ export const api = {
     return request<void>(
       `/api/sessions/${normalizeSlug(slug)}/knock/${encodeURIComponent(knock_id)}`,
       { method: 'DELETE' },
+    );
+  },
+
+  createInvite(slug: string) {
+    return request<{ code: string; expires_at: number }>(
+      `/api/sessions/${normalizeSlug(slug)}/invites`,
+      { method: 'POST' },
+    );
+  },
+
+  listInvites(slug: string) {
+    return request<{ invites: InviteSummary[]; cap: number }>(
+      `/api/sessions/${normalizeSlug(slug)}/invites`,
+    );
+  },
+
+  revokeInvite(slug: string, code: string) {
+    return request<void>(
+      `/api/sessions/${normalizeSlug(slug)}/invites/${encodeURIComponent(code)}`,
+      { method: 'DELETE' },
+    );
+  },
+
+  redeemInvite(slug: string, code: string, display_name: string) {
+    return request<{ slug: string; owner_user_id: string; user_id: string }>(
+      `/api/sessions/${normalizeSlug(slug)}/invites/${encodeURIComponent(code)}`,
+      { method: 'POST', body: JSON.stringify({ display_name }) },
     );
   },
 

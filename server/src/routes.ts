@@ -30,6 +30,15 @@ const knockLimiter = rateLimit({
   message: { error: 'rate_limited' },
 });
 
+const inviteLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => `${req.ip}:${normalizeSlug(req.params.slug ?? '')}`,
+  message: { error: 'rate_limited' },
+});
+
 // ---- multer (memory) -----------------------------------------------------
 
 const upload = multer({
@@ -171,6 +180,83 @@ router.delete('/sessions/:slug/knock/:knock_id', (req: Request, res: Response) =
   clearSessionCookie(res, slug);
   emitToOwner(session, 'knock:cancelled', { knock_id: req.params.knock_id });
   res.status(204).end();
+});
+
+// ---- POST /api/sessions/:slug/invites (owner mints invite) ---------------
+
+router.post(
+  '/sessions/:slug/invites',
+  inviteLimiter,
+  requireOwner,
+  blockIfFrozen,
+  (req: Request, res: Response) => {
+    const session = req.session!;
+    const invite = store.createInvite(session);
+    if (!invite) {
+      res.status(429).json({ error: 'invite_cap' });
+      return;
+    }
+    res.status(201).json({ code: invite.code, expires_at: invite.expires_at });
+  },
+);
+
+// ---- GET /api/sessions/:slug/invites (owner lists active invites) --------
+
+router.get('/sessions/:slug/invites', requireOwner, (req: Request, res: Response) => {
+  const session = req.session!;
+  const invites = store.listInvites(session).map((i) => ({
+    code: i.code,
+    created_at: i.created_at,
+    expires_at: i.expires_at,
+  }));
+  res.json({ invites, cap: config.inviteCap });
+});
+
+// ---- DELETE /api/sessions/:slug/invites/:code (owner revokes) ------------
+
+router.delete('/sessions/:slug/invites/:code', requireOwner, (req: Request, res: Response) => {
+  const session = req.session!;
+  if (!store.revokeInvite(session, req.params.code)) {
+    res.status(404).json({ error: 'invite_invalid' });
+    return;
+  }
+  res.status(204).end();
+});
+
+// ---- POST /api/sessions/:slug/invites/:code (redeem, public) -------------
+
+router.post('/sessions/:slug/invites/:code', inviteLimiter, (req: Request, res: Response) => {
+  const parsed = knockBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'invalid_display_name' });
+    return;
+  }
+  const session = store.getSession(req.params.slug);
+  if (!session) {
+    res.status(404).json({ error: 'session_not_found' });
+    return;
+  }
+  if (session.frozen) {
+    res.status(423).json({ error: 'session_frozen' });
+    return;
+  }
+  const redeemed = store.redeemInvite(session, req.params.code, parsed.data.display_name);
+  if (!redeemed) {
+    res.status(404).json({ error: 'invite_invalid' });
+    return;
+  }
+  setSessionCookie(res, session.slug, redeemed.token, config.memberCookieMaxAgeS);
+  // Tell the owner the invite was consumed so their invite list can refresh.
+  emitToOwner(session, 'invite:used', {
+    code: req.params.code,
+    user_id: redeemed.member.user_id,
+    display_name: redeemed.member.display_name,
+  });
+  res.status(200).json({
+    slug: session.slug,
+    owner_user_id: session.owner_user_id,
+    user_id: redeemed.member.user_id,
+  });
 });
 
 // ---- GET /api/sessions/:slug (snapshot) ----------------------------------

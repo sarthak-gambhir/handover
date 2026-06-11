@@ -28,6 +28,7 @@ export function useSession(slug: string) {
   const [knockers, setKnockers] = useState<Knock[]>([]);
   const [knockingPaused, setKnockingPaused] = useState(false);
   const [frozen, setFrozenState] = useState(false);
+  const [inviteUsed, setInviteUsed] = useState<{ code: string; at: number } | null>(null);
   const [yourUserId, setYourUserId] = useState('');
   const [ownerUserId, setOwnerUserId] = useState('');
   const [transfers, setTransfers] = useState<TransferVM[]>([]);
@@ -198,6 +199,10 @@ export function useSession(slug: string) {
     socket.on('knock:expired', (p) => setKnockers((prev) => prev.filter((k) => k.knock_id !== p.knock_id)));
     socket.on('knocking:paused', (p) => setKnockingPaused(p.paused));
     socket.on('session:frozen', (p) => setFrozenState(p.frozen));
+    socket.on('invite:used', (p) => {
+      setInviteUsed({ code: p.code, at: Date.now() });
+      toast(`${p.display_name} joined via an invite link.`, 'info');
+    });
 
     socket.on('file:added', (p) => {
       setBucket((prev) => (prev.some((e) => e.id === p.entry.id) ? prev : [...prev, p.entry]));
@@ -538,6 +543,7 @@ export function useSession(slug: string) {
     knockers,
     knockingPaused,
     frozen,
+    inviteUsed,
     yourUserId,
     ownerUserId,
     isOwner,

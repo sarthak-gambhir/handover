@@ -33,6 +33,17 @@ export function relativeTime(ts: number): string {
   return `${h}h ago`;
 }
 
+/** Human "expires in …" for a future timestamp; "expired" once past. */
+export function expiresIn(ts: number): string {
+  const diff = ts - Date.now();
+  if (diff <= 0) return 'expired';
+  const m = Math.round(diff / 60000);
+  if (m < 1) return 'expires in <1m';
+  if (m < 60) return `expires in ${m}m`;
+  const h = Math.floor(m / 60);
+  return `expires in ${h}h`;
+}
+
 /** Last 4 chars of a user_id for collision disambiguation. */
 export function shortId(userId: string): string {
   return userId.replace(/-/g, '').slice(-6);
