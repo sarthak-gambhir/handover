@@ -41,19 +41,58 @@
 }
 
 .home_cards {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space_4);
-
-  @include m.sm_up {
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-  }
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .home_card_primary {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+// Full-width segmented toggle: half for Create, half for Join.
+.home_tabs {
+  display: flex;
+  width: 100%;
+  margin-bottom: var(--space_4);
+
+  .tabs_tab {
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    padding: var(--space_3);
+  }
+
+  // Active tab uses the primary accent fill to match the form action.
+  .tabs_tab_active {
+    background: var(--accent);
+    color: #fff;
+
+    &:hover {
+      color: #fff;
+    }
+  }
+}
+
+.home_panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.home_panel_helpers {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space_4);
+}
+.home_panel_helper {
+  font-size: 13px;
+  color: var(--fg_muted);
+  line-height: 1;
+  padding-bottom: var(--space_4);
 }
 
 .home_form {

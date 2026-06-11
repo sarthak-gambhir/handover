@@ -527,9 +527,13 @@ export function useSession(slug: string) {
   );
 
   const deleteOwnUploads = useCallback(async () => {
+    if (frozen) {
+      toast('Session is frozen — files are locked.', 'warn');
+      return;
+    }
     const mine = bucket.filter((e) => e.uploader_id === yourUserId).map((e) => e.id);
     await Promise.allSettled(mine.map((id) => api.deleteFile(slug, id)));
-  }, [bucket, yourUserId, slug]);
+  }, [frozen, bucket, yourUserId, slug, toast]);
 
   const hasActiveWork =
     uploads.length > 0 || transfers.some((t) => !isTerminal(t.status));

@@ -16,20 +16,25 @@ import { BrandMark } from "../components/ui/BrandMark";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
+import { Tabs } from "../components/ui/Tabs";
 import { useToast } from "../components/ui/Toast";
 import { api, ApiError } from "../lib/api";
 import { sessionStore } from "../lib/sessionStore";
 import { normalizeSlug, sessionPath, waitingPath } from "../lib/slug";
 import "./Home.scss";
 
+type HomeTab = "create" | "join";
+
 export function Home() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [params] = useSearchParams();
 
+  const prefillSlug = params.get("slug") ?? "";
+  const [tab, setTab] = useState<HomeTab>(prefillSlug ? "join" : "create");
   const [creating, setCreating] = useState(false);
   const [knocking, setKnocking] = useState(false);
-  const [slug, setSlug] = useState(params.get("slug") ?? "");
+  const [slug, setSlug] = useState(prefillSlug);
   const [name, setName] = useState("");
   const [ownerName, setOwnerName] = useState("");
 
@@ -114,63 +119,100 @@ export function Home() {
         </header>
 
         <div className="home_cards">
-          <Card
-            className="home_card home_card_primary"
-            title="Create a session"
-            helper="You create a new session and manage it. Admit others by approving their knock requests."
-          >
-            <form className="home_form" onSubmit={onCreate}>
-              <Input
-                label="Your name"
-                placeholder="Alex"
-                value={ownerName}
-                onChange={(e) => setOwnerName(e.target.value)}
-                maxLength={32}
-                autoComplete="off"
-              />
-              <Button
-                type="submit"
-                loading={creating}
-                disabled={!ownerName.trim()}
-                icon={<RiChatNewLine size={22} />}
-              >
-                Create
-              </Button>
-            </form>
-          </Card>
+          <Card className="home_card home_card_primary">
+            <Tabs
+              className="home_tabs"
+              ariaLabel="Create or join a session"
+              value={tab}
+              onChange={(id) => setTab(id as HomeTab)}
+              items={[
+                { id: "create", label: "Create", panelId: "home_panel_create" },
+                { id: "join", label: "Join", panelId: "home_panel_join" },
+              ]}
+            />
 
-          <Card
-            className="home_card"
-            title="Join a session"
-            helper="Enter the session ID someone shared with you and knock to request entry."
-          >
-            <form className="home_form" onSubmit={onKnock}>
-              <Input
-                label="Session ID"
-                mono
-                placeholder="purple-otter-77"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                autoComplete="off"
-              />
-              <Input
-                label="Your display name"
-                placeholder="Alex"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={32}
-                autoComplete="off"
-              />
-              <Button
-                type="submit"
-                variant="secondary"
-                loading={knocking}
-                disabled={!slug.trim() || !name.trim()}
-                icon={<RiChatUploadLine size={22} />}
+            {tab === "create" ? (
+              <div
+                id="home_panel_create"
+                role="tabpanel"
+                aria-labelledby="tab_create"
+                className="home_panel"
               >
-                Knock
-              </Button>
-            </form>
+                <div className="home_panel_helpers">
+                  <p className="home_panel_helper">
+                    Start a private space to share with your circle, where you
+                    stay in control.
+                  </p>
+                  <p className="home_panel_helper">
+                    No footprint, no clutter – everything disappears when the
+                    session ends.
+                  </p>
+                </div>
+
+                <form className="home_form" onSubmit={onCreate}>
+                  <Input
+                    label="Your name"
+                    placeholder="Alex"
+                    value={ownerName}
+                    onChange={(e) => setOwnerName(e.target.value)}
+                    maxLength={32}
+                    autoComplete="off"
+                  />
+                  <Button
+                    type="submit"
+                    loading={creating}
+                    disabled={!ownerName.trim()}
+                    icon={<RiChatNewLine size={22} />}
+                  >
+                    Create New Session
+                  </Button>
+                </form>
+              </div>
+            ) : (
+              <div
+                id="home_panel_join"
+                role="tabpanel"
+                aria-labelledby="tab_join"
+                className="home_panel"
+              >
+                <div className="home_panel_helpers">
+                  <p className="home_panel_helper">
+                    Request to join. Step inside, share and access session
+                    files.
+                  </p>
+                  <p className="home_panel_helper">
+                    No footprint, no clutter – everything disappears when the
+                    session ends.
+                  </p>
+                </div>
+                <form className="home_form" onSubmit={onKnock}>
+                  <Input
+                    label="Session ID"
+                    mono
+                    placeholder="purple-otter-77"
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                    autoComplete="off"
+                  />
+                  <Input
+                    label="Your display name"
+                    placeholder="Alex"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={32}
+                    autoComplete="off"
+                  />
+                  <Button
+                    type="submit"
+                    loading={knocking}
+                    disabled={!slug.trim() || !name.trim()}
+                    icon={<RiChatUploadLine size={22} />}
+                  >
+                    Knock to Join
+                  </Button>
+                </form>
+              </div>
+            )}
           </Card>
         </div>
 

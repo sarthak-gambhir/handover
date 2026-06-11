@@ -635,6 +635,12 @@ export function Session() {
               </Button>
               <Button
                 variant="danger"
+                disabled={s.frozen}
+                title={
+                  s.frozen
+                    ? "Session is halted — files can't be deleted right now"
+                    : undefined
+                }
                 onClick={async () => {
                   setConfirmLeave(false);
                   await s.deleteOwnUploads();
@@ -670,6 +676,13 @@ export function Session() {
             You have {ownUploadCount} file{ownUploadCount === 1 ? "" : "s"} in
             the shared bucket. If you keep them, they’ll stay for the others
             until the owner removes them.
+            {s.frozen && (
+              <>
+                {" "}
+                The session is halted, so deleting files is unavailable right
+                now.
+              </>
+            )}
           </>
         ) : (
           <>
