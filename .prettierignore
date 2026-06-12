@@ -1,0 +1,15 @@
+# Dependencies and build output
+node_modules
+build
+dist
+coverage
+
+# Internal docs and files
+.sandbox
+
+# Editor files
+.vscode
+.cursor
+
+# Markdown files
+*.md

@@ -56,7 +56,7 @@ export function Session() {
   const [sendTarget, setSendTarget] = useState<PublicMember | null>(null);
   const [kickTarget, setKickTarget] = useState<PublicMember | null>(null);
   const [makeOwnerTarget, setMakeOwnerTarget] = useState<PublicMember | null>(
-    null,
+    null
   );
   const [deleteUploadsTarget, setDeleteUploadsTarget] =
     useState<PublicMember | null>(null);
@@ -70,10 +70,10 @@ export function Session() {
 
   const memberIds = new Set(s.members.map((m) => m.user_id));
   const orphanedCount = s.bucket.filter(
-    (e) => !memberIds.has(e.uploader_id),
+    (e) => !memberIds.has(e.uploader_id)
   ).length;
   const ownUploadCount = s.bucket.filter(
-    (e) => e.uploader_id === s.yourUserId,
+    (e) => e.uploader_id === s.yourUserId
   ).length;
   const otherMembers = s.members.filter((m) => m.user_id !== s.yourUserId);
 
@@ -189,9 +189,7 @@ export function Session() {
           className="session_menu_item"
           disabled={s.frozen}
           title={
-            s.frozen
-              ? "Unfreeze the session to manage knocking"
-              : undefined
+            s.frozen ? "Unfreeze the session to manage knocking" : undefined
           }
           onClick={() => {
             setMenuOpen(false);
@@ -748,7 +746,7 @@ export function Session() {
                   setOwnerTransferPick(false);
                   toast(
                     `Ownership offer sent to ${m.display_name}. They’ll take over once they accept.`,
-                    "info",
+                    "info"
                   );
                 }}
               >

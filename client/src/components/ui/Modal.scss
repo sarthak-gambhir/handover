@@ -69,7 +69,8 @@
   color: var(--fg_muted);
   border-radius: var(--radius_md);
   cursor: pointer;
-  transition: color var(--duration_fast) var(--ease_out),
+  transition:
+    color var(--duration_fast) var(--ease_out),
     background var(--duration_fast) var(--ease_out);
   @include m.focus_ring;
 

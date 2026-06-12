@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Keeps a component mounted through its exit transition.
@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react';
  */
 export function useExitAnimation(
   isOpen: boolean,
-  durationMs = 200,
+  durationMs = 200
 ): {
   mounted: boolean;
   exiting: boolean;
@@ -40,10 +40,10 @@ export function useExitAnimation(
     const onEnd = (e: TransitionEvent) => {
       if (e.target === node) finish();
     };
-    node?.addEventListener('transitionend', onEnd);
+    node?.addEventListener("transitionend", onEnd);
     const t = setTimeout(finish, durationMs + 60);
     return () => {
-      node?.removeEventListener('transitionend', onEnd);
+      node?.removeEventListener("transitionend", onEnd);
       clearTimeout(t);
     };
   }, [isOpen, mounted, durationMs]);

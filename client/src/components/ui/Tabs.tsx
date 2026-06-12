@@ -76,7 +76,9 @@ export function Tabs({
             onClick={() => onChange(t.id)}
           >
             <span className="tabs_tab_label">{t.label}</span>
-            {t.badge != null && <span className="tabs_tab_badge">{t.badge}</span>}
+            {t.badge != null && (
+              <span className="tabs_tab_badge">{t.badge}</span>
+            )}
           </button>
         );
       })}

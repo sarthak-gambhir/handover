@@ -1,4 +1,4 @@
-import { normalizeSlug } from './slug';
+import { normalizeSlug } from "./slug";
 
 export interface PublicMember {
   user_id: string;
@@ -44,8 +44,8 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
     ...init,
   });
   if (!res.ok) {
@@ -64,50 +64,53 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   createSession(display_name: string) {
-    return request<{ slug: string; owner_user_id: string }>('/api/sessions', {
-      method: 'POST',
+    return request<{ slug: string; owner_user_id: string }>("/api/sessions", {
+      method: "POST",
       body: JSON.stringify({ display_name }),
     });
   },
 
   knock(slug: string, display_name: string) {
-    return request<{ knock_id: string }>(`/api/sessions/${normalizeSlug(slug)}/knock`, {
-      method: 'POST',
-      body: JSON.stringify({ display_name }),
-    });
+    return request<{ knock_id: string }>(
+      `/api/sessions/${normalizeSlug(slug)}/knock`,
+      {
+        method: "POST",
+        body: JSON.stringify({ display_name }),
+      }
+    );
   },
 
   cancelKnock(slug: string, knock_id: string) {
     return request<void>(
       `/api/sessions/${normalizeSlug(slug)}/knock/${encodeURIComponent(knock_id)}`,
-      { method: 'DELETE' },
+      { method: "DELETE" }
     );
   },
 
   createInvite(slug: string) {
     return request<{ code: string; expires_at: number }>(
       `/api/sessions/${normalizeSlug(slug)}/invites`,
-      { method: 'POST' },
+      { method: "POST" }
     );
   },
 
   listInvites(slug: string) {
     return request<{ invites: InviteSummary[]; cap: number }>(
-      `/api/sessions/${normalizeSlug(slug)}/invites`,
+      `/api/sessions/${normalizeSlug(slug)}/invites`
     );
   },
 
   revokeInvite(slug: string, code: string) {
     return request<void>(
       `/api/sessions/${normalizeSlug(slug)}/invites/${encodeURIComponent(code)}`,
-      { method: 'DELETE' },
+      { method: "DELETE" }
     );
   },
 
   redeemInvite(slug: string, code: string, display_name: string) {
     return request<{ slug: string; owner_user_id: string; user_id: string }>(
       `/api/sessions/${normalizeSlug(slug)}/invites/${encodeURIComponent(code)}`,
-      { method: 'POST', body: JSON.stringify({ display_name }) },
+      { method: "POST", body: JSON.stringify({ display_name }) }
     );
   },
 
@@ -116,25 +119,30 @@ export const api = {
   },
 
   deleteFile(slug: string, id: string) {
-    return request<void>(`/api/sessions/${normalizeSlug(slug)}/files/${id}`, { method: 'DELETE' });
+    return request<void>(`/api/sessions/${normalizeSlug(slug)}/files/${id}`, {
+      method: "DELETE",
+    });
   },
 
   deleteOrphanedFiles(slug: string) {
-    return request<{ removed: number }>(`/api/sessions/${normalizeSlug(slug)}/orphaned-files`, {
-      method: 'DELETE',
-    });
+    return request<{ removed: number }>(
+      `/api/sessions/${normalizeSlug(slug)}/orphaned-files`,
+      {
+        method: "DELETE",
+      }
+    );
   },
 
   deleteMemberFiles(slug: string, user_id: string) {
     return request<{ removed: number }>(
       `/api/sessions/${normalizeSlug(slug)}/members/${encodeURIComponent(user_id)}/files`,
-      { method: 'DELETE' },
+      { method: "DELETE" }
     );
   },
 
   turn(slug: string) {
     return request<{ iceServers: RTCIceServer[] }>(
-      `/api/turn?slug=${encodeURIComponent(normalizeSlug(slug))}`,
+      `/api/turn?slug=${encodeURIComponent(normalizeSlug(slug))}`
     );
   },
 

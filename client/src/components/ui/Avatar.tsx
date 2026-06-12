@@ -24,7 +24,8 @@ function initials(name: string): string {
 // Class-based (no inline styles) to satisfy the production CSP.
 function colorIndex(seed: string): number {
   let h = 0;
-  for (let i = 0; i < seed.length; i += 1) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  for (let i = 0; i < seed.length; i += 1)
+    h = (h * 31 + seed.charCodeAt(i)) | 0;
   return Math.abs(h) % COLOR_COUNT;
 }
 
@@ -35,7 +36,7 @@ export function Avatar({ name, size = "md", online, className }: AvatarProps) {
         "avatar",
         `avatar_${size}`,
         `avatar_c${colorIndex(name)}`,
-        className,
+        className
       )}
       aria-hidden="true"
       title={name}
@@ -45,7 +46,7 @@ export function Avatar({ name, size = "md", online, className }: AvatarProps) {
         <span
           className={cx(
             "avatar_dot",
-            online ? "avatar_dot_online" : "avatar_dot_offline",
+            online ? "avatar_dot_online" : "avatar_dot_offline"
           )}
         />
       )}

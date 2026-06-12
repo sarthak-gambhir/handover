@@ -86,9 +86,8 @@ export function Waiting() {
             </p>
             {knockId && (
               <p className="waiting_idline">
-                Your id{" "}
-                <span className="waiting_id">#{shortId(knockId)}</span> — share
-                it so the owner can find you.
+                Your id <span className="waiting_id">#{shortId(knockId)}</span>{" "}
+                — share it so the owner can find you.
               </p>
             )}
             <Button variant="ghost" onClick={onCancel}>

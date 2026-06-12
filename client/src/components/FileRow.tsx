@@ -80,7 +80,7 @@ export function FileRow({
             <a
               className={cx(
                 "file_row_download",
-                frozen && "file_row_download_disabled",
+                frozen && "file_row_download_disabled"
               )}
               href={frozen ? undefined : downloadUrl}
               download={frozen ? undefined : entry.name}

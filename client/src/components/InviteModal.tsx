@@ -143,7 +143,8 @@ export function InviteModal({
     >
       <div className="invite_modal_body">
         <p className="invite_modal_hint">
-          Each link admits one person with no knock and expires after 30 minutes.
+          Each link admits one person with no knock and expires after 30
+          minutes.
         </p>
         {frozen && (
           <p className="invite_modal_warn">
@@ -165,8 +166,12 @@ export function InviteModal({
               {invites.map((inv) => (
                 <li key={inv.code} className="invite_modal_item">
                   <div className="invite_modal_item_info">
-                    <span className="invite_modal_code">#{inv.code.slice(-6)}</span>
-                    <span className="invite_modal_exp">{expiresIn(inv.expires_at)}</span>
+                    <span className="invite_modal_code">
+                      #{inv.code.slice(-6)}
+                    </span>
+                    <span className="invite_modal_exp">
+                      {expiresIn(inv.expires_at)}
+                    </span>
                   </div>
                   <div className="invite_modal_item_actions">
                     <Button

@@ -1,5 +1,5 @@
-import { normalizeSlug } from './slug';
-import type { PublicBucketEntry } from './api';
+import { normalizeSlug } from "./slug";
+import type { PublicBucketEntry } from "./api";
 
 export interface UploadHandle {
   promise: Promise<PublicBucketEntry>;
@@ -17,19 +17,19 @@ export function uploadWithProgress(slug: string, file: File): UploadHandle {
   let progressCb: ((f: number) => void) | null = null;
 
   const promise = new Promise<PublicBucketEntry>((resolve, reject) => {
-    xhr.open('POST', `/api/sessions/${normalizeSlug(slug)}/files`);
+    xhr.open("POST", `/api/sessions/${normalizeSlug(slug)}/files`);
     xhr.withCredentials = true;
 
-    xhr.upload.addEventListener('progress', (e) => {
+    xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable && progressCb) progressCb(e.loaded / e.total);
     });
 
-    xhr.addEventListener('load', () => {
+    xhr.addEventListener("load", () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           resolve(JSON.parse(xhr.responseText) as PublicBucketEntry);
         } catch {
-          reject({ status: xhr.status, code: 'bad_response' });
+          reject({ status: xhr.status, code: "bad_response" });
         }
       } else {
         let code = `http_${xhr.status}`;
@@ -43,11 +43,13 @@ export function uploadWithProgress(slug: string, file: File): UploadHandle {
       }
     });
 
-    xhr.addEventListener('error', () => reject({ status: 0, code: 'network_error' }));
-    xhr.addEventListener('abort', () => reject({ status: 0, code: 'aborted' }));
+    xhr.addEventListener("error", () =>
+      reject({ status: 0, code: "network_error" })
+    );
+    xhr.addEventListener("abort", () => reject({ status: 0, code: "aborted" }));
 
     const form = new FormData();
-    form.append('file', file);
+    form.append("file", file);
     xhr.send(form);
   });
 

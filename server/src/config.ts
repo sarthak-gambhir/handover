@@ -1,8 +1,8 @@
-import 'dotenv/config';
+import "dotenv/config";
 
 function intEnv(name: string, fallback: number): number {
   const raw = process.env[name];
-  if (raw === undefined || raw === '') return fallback;
+  if (raw === undefined || raw === "") return fallback;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 }
@@ -10,16 +10,16 @@ function intEnv(name: string, fallback: number): number {
 const MB = 1024 * 1024;
 
 export const config = {
-  port: intEnv('PORT', 3000),
-  host: process.env.HOST ?? '0.0.0.0',
-  nodeEnv: process.env.NODE_ENV ?? 'development',
-  isProd: process.env.NODE_ENV === 'production',
-  clientOrigin: process.env.CLIENT_ORIGIN ?? 'http://localhost:5173',
+  port: intEnv("PORT", 3000),
+  host: process.env.HOST ?? "0.0.0.0",
+  nodeEnv: process.env.NODE_ENV ?? "development",
+  isProd: process.env.NODE_ENV === "production",
+  clientOrigin: process.env.CLIENT_ORIGIN ?? "http://localhost:5173",
 
   // Storage caps
-  maxFileBytes: intEnv('MAX_FILE_BYTES', 100 * MB),
-  maxSessionBytes: intEnv('MAX_SESSION_BYTES', 500 * MB),
-  maxTotalBytes: intEnv('MAX_TOTAL_BYTES', 512 * MB),
+  maxFileBytes: intEnv("MAX_FILE_BYTES", 100 * MB),
+  maxSessionBytes: intEnv("MAX_SESSION_BYTES", 500 * MB),
+  maxTotalBytes: intEnv("MAX_TOTAL_BYTES", 512 * MB),
 
   // Lifecycle timings (ms)
   sessionIdleMs: 60 * 60 * 1000, // 60 min
@@ -37,7 +37,7 @@ export const config = {
 
   // Invite links
   inviteTtlMs: 30 * 60 * 1000, // 30 min single-use invite TTL
-  inviteCap: intEnv('INVITE_CAP', 10), // max live invites per session
+  inviteCap: intEnv("INVITE_CAP", 10), // max live invites per session
 
   // Ownership offer TTL (ms) — an unaccepted offer expires after this.
   ownerOfferTtlMs: 60 * 1000,

@@ -22,7 +22,7 @@ export function PresenceStack({
   const onlineCount = members.filter((m) => m.online).length;
   // Online members come first so the visible faces favour who's here now.
   const ordered = [...members].sort(
-    (a, b) => Number(b.online) - Number(a.online),
+    (a, b) => Number(b.online) - Number(a.online)
   );
   const shown = ordered.slice(0, max);
   const overflow = members.length - shown.length;

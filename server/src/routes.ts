@@ -1,15 +1,25 @@
-import { Router, type Request, type Response, type NextFunction } from 'express';
-import multer from 'multer';
-import { rateLimit } from 'express-rate-limit';
-import { config } from './config.js';
-import { store } from './sessions.js';
-import { normalizeSlug } from './slug.js';
-import { knockBodySchema, createSessionBodySchema } from './validation.js';
-import { sanitizeFilename } from './lib/sanitize_filename.js';
-import { requireMember, requireOwner, setSessionCookie, clearSessionCookie } from './auth.js';
-import { emitToSession, emitToOwner } from './realtime.js';
-import { iceServers } from './ice.js';
-import type { Session } from './types.js';
+import {
+  Router,
+  type Request,
+  type Response,
+  type NextFunction,
+} from "express";
+import multer from "multer";
+import { rateLimit } from "express-rate-limit";
+import { config } from "./config.js";
+import { store } from "./sessions.js";
+import { normalizeSlug } from "./slug.js";
+import { knockBodySchema, createSessionBodySchema } from "./validation.js";
+import { sanitizeFilename } from "./lib/sanitize_filename.js";
+import {
+  requireMember,
+  requireOwner,
+  setSessionCookie,
+  clearSessionCookie,
+} from "./auth.js";
+import { emitToSession, emitToOwner } from "./realtime.js";
+import { iceServers } from "./ice.js";
+import type { Session } from "./types.js";
 
 // ---- rate limiters -------------------------------------------------------
 
@@ -18,7 +28,7 @@ const createLimiter = rateLimit({
   limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'rate_limited' },
+  message: { error: "rate_limited" },
 });
 
 const knockLimiter = rateLimit({
@@ -26,8 +36,8 @@ const knockLimiter = rateLimit({
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `${req.ip}:${normalizeSlug(req.params.slug ?? '')}`,
-  message: { error: 'rate_limited' },
+  keyGenerator: (req) => `${req.ip}:${normalizeSlug(req.params.slug ?? "")}`,
+  message: { error: "rate_limited" },
 });
 
 const inviteLimiter = rateLimit({
@@ -35,8 +45,8 @@ const inviteLimiter = rateLimit({
   limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `${req.ip}:${normalizeSlug(req.params.slug ?? '')}`,
-  message: { error: 'rate_limited' },
+  keyGenerator: (req) => `${req.ip}:${normalizeSlug(req.params.slug ?? "")}`,
+  message: { error: "rate_limited" },
 });
 
 // ---- multer (memory) -----------------------------------------------------
@@ -50,7 +60,7 @@ const upload = multer({
 // run after requireMember/requireOwner so req.session is populated.
 function blockIfFrozen(req: Request, res: Response, next: NextFunction): void {
   if (req.session?.frozen) {
-    res.status(423).json({ error: 'session_frozen' });
+    res.status(423).json({ error: "session_frozen" });
     return;
   }
   next();
@@ -76,14 +86,14 @@ declare global {
 /** Reserve bytes from the Content-Length header before Multer reads the body. */
 function reserveUpload(req: Request, res: Response, next: NextFunction): void {
   const session = req.session!;
-  const clHeader = req.headers['content-length'];
+  const clHeader = req.headers["content-length"];
   const cl = clHeader ? Number(clHeader) : NaN;
   if (!Number.isFinite(cl) || cl <= 0) {
-    res.status(411).json({ error: 'length_required' });
+    res.status(411).json({ error: "length_required" });
     return;
   }
   if (!store.reserveBytes(session, cl)) {
-    res.status(507).json({ error: 'insufficient_storage' });
+    res.status(507).json({ error: "insufficient_storage" });
     return;
   }
   req.reservation = { session, bytes: cl, done: false };
@@ -95,8 +105,8 @@ function reserveUpload(req: Request, res: Response, next: NextFunction): void {
     }
   };
   // Release on client abort / premature close.
-  req.on('aborted', release);
-  res.on('close', () => {
+  req.on("aborted", release);
+  res.on("close", () => {
     if (!res.writableEnded) release();
   });
   next();
@@ -105,87 +115,103 @@ function reserveUpload(req: Request, res: Response, next: NextFunction): void {
 export const router = Router();
 
 // Normalise slug params to lowercase for every route that has one.
-router.param('slug', (req, _res, next, slug: string) => {
+router.param("slug", (req, _res, next, slug: string) => {
   req.params.slug = normalizeSlug(slug);
   next();
 });
 
 // ---- POST /api/sessions --------------------------------------------------
 
-router.post('/sessions', createLimiter, (req: Request, res: Response) => {
+router.post("/sessions", createLimiter, (req: Request, res: Response) => {
   const parsed = createSessionBodySchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: 'invalid_display_name' });
+    res.status(400).json({ error: "invalid_display_name" });
     return;
   }
-  const { session, ownerToken, ownerUserId } = store.createSession(parsed.data.display_name);
+  const { session, ownerToken, ownerUserId } = store.createSession(
+    parsed.data.display_name
+  );
   setSessionCookie(res, session.slug, ownerToken, config.memberCookieMaxAgeS);
   res.status(201).json({ slug: session.slug, owner_user_id: ownerUserId });
 });
 
 // ---- POST /api/sessions/:slug/knock --------------------------------------
 
-router.post('/sessions/:slug/knock', knockLimiter, (req: Request, res: Response) => {
-  const parsed = knockBodySchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'invalid_display_name' });
-    return;
-  }
-  const session = store.getSession(req.params.slug);
-  if (!session) {
-    res.status(404).json({ error: 'session_not_found' });
-    return;
-  }
-  if (session.frozen) {
-    res.status(423).json({ error: 'session_frozen' });
-    return;
-  }
-  if (session.knocking_paused) {
-    res.status(423).json({ error: 'knocking_paused' });
-    return;
-  }
-  if (session.knockers.size >= config.knockQueueCap) {
-    res.status(429).json({ error: 'knock_queue_full' });
-    return;
-  }
+router.post(
+  "/sessions/:slug/knock",
+  knockLimiter,
+  (req: Request, res: Response) => {
+    const parsed = knockBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_display_name" });
+      return;
+    }
+    const session = store.getSession(req.params.slug);
+    if (!session) {
+      res.status(404).json({ error: "session_not_found" });
+      return;
+    }
+    if (session.frozen) {
+      res.status(423).json({ error: "session_frozen" });
+      return;
+    }
+    if (session.knocking_paused) {
+      res.status(423).json({ error: "knocking_paused" });
+      return;
+    }
+    if (session.knockers.size >= config.knockQueueCap) {
+      res.status(429).json({ error: "knock_queue_full" });
+      return;
+    }
 
-  const { knocker, token } = store.addKnocker(session, parsed.data.display_name);
-  setSessionCookie(res, session.slug, token, config.pendingCookieMaxAgeS);
-  emitToOwner(session, 'knock:new', {
-    knock_id: knocker.knock_id,
-    display_name: knocker.display_name,
-    created_at: knocker.created_at,
-  });
-  res.status(201).json({ knock_id: knocker.knock_id });
-});
+    const { knocker, token } = store.addKnocker(
+      session,
+      parsed.data.display_name
+    );
+    setSessionCookie(res, session.slug, token, config.pendingCookieMaxAgeS);
+    emitToOwner(session, "knock:new", {
+      knock_id: knocker.knock_id,
+      display_name: knocker.display_name,
+      created_at: knocker.created_at,
+    });
+    res.status(201).json({ knock_id: knocker.knock_id });
+  }
+);
 
 // ---- DELETE /api/sessions/:slug/knock/:knock_id --------------------------
 
-router.delete('/sessions/:slug/knock/:knock_id', (req: Request, res: Response) => {
-  const slug = req.params.slug;
-  const session = store.getSession(slug);
-  if (!session) {
-    res.status(404).json({ error: 'session_not_found' });
-    return;
+router.delete(
+  "/sessions/:slug/knock/:knock_id",
+  (req: Request, res: Response) => {
+    const slug = req.params.slug;
+    const session = store.getSession(slug);
+    if (!session) {
+      res.status(404).json({ error: "session_not_found" });
+      return;
+    }
+    // Gate on the pending cookie matching this knock_id.
+    const cookies = (req.cookies ?? {}) as Record<string, string>;
+    const token = cookies[`st_${slug}`];
+    const entry = store.lookupToken(token);
+    if (
+      !entry ||
+      entry.status !== "pending" ||
+      entry.knock_id !== req.params.knock_id
+    ) {
+      res.status(403).json({ error: "forbidden" });
+      return;
+    }
+    store.removeKnocker(session, req.params.knock_id);
+    clearSessionCookie(res, slug);
+    emitToOwner(session, "knock:cancelled", { knock_id: req.params.knock_id });
+    res.status(204).end();
   }
-  // Gate on the pending cookie matching this knock_id.
-  const cookies = (req.cookies ?? {}) as Record<string, string>;
-  const token = cookies[`st_${slug}`];
-  const entry = store.lookupToken(token);
-  if (!entry || entry.status !== 'pending' || entry.knock_id !== req.params.knock_id) {
-    res.status(403).json({ error: 'forbidden' });
-    return;
-  }
-  store.removeKnocker(session, req.params.knock_id);
-  clearSessionCookie(res, slug);
-  emitToOwner(session, 'knock:cancelled', { knock_id: req.params.knock_id });
-  res.status(204).end();
-});
+);
 
 // ---- POST /api/sessions/:slug/invites (owner mints invite) ---------------
 
 router.post(
-  '/sessions/:slug/invites',
+  "/sessions/:slug/invites",
   inviteLimiter,
   requireOwner,
   blockIfFrozen,
@@ -193,75 +219,96 @@ router.post(
     const session = req.session!;
     const invite = store.createInvite(session);
     if (!invite) {
-      res.status(429).json({ error: 'invite_cap' });
+      res.status(429).json({ error: "invite_cap" });
       return;
     }
     res.status(201).json({ code: invite.code, expires_at: invite.expires_at });
-  },
+  }
 );
 
 // ---- GET /api/sessions/:slug/invites (owner lists active invites) --------
 
-router.get('/sessions/:slug/invites', requireOwner, (req: Request, res: Response) => {
-  const session = req.session!;
-  const invites = store.listInvites(session).map((i) => ({
-    code: i.code,
-    created_at: i.created_at,
-    expires_at: i.expires_at,
-  }));
-  res.json({ invites, cap: config.inviteCap });
-});
+router.get(
+  "/sessions/:slug/invites",
+  requireOwner,
+  (req: Request, res: Response) => {
+    const session = req.session!;
+    const invites = store.listInvites(session).map((i) => ({
+      code: i.code,
+      created_at: i.created_at,
+      expires_at: i.expires_at,
+    }));
+    res.json({ invites, cap: config.inviteCap });
+  }
+);
 
 // ---- DELETE /api/sessions/:slug/invites/:code (owner revokes) ------------
 
-router.delete('/sessions/:slug/invites/:code', requireOwner, (req: Request, res: Response) => {
-  const session = req.session!;
-  if (!store.revokeInvite(session, req.params.code)) {
-    res.status(404).json({ error: 'invite_invalid' });
-    return;
+router.delete(
+  "/sessions/:slug/invites/:code",
+  requireOwner,
+  (req: Request, res: Response) => {
+    const session = req.session!;
+    if (!store.revokeInvite(session, req.params.code)) {
+      res.status(404).json({ error: "invite_invalid" });
+      return;
+    }
+    res.status(204).end();
   }
-  res.status(204).end();
-});
+);
 
 // ---- POST /api/sessions/:slug/invites/:code (redeem, public) -------------
 
-router.post('/sessions/:slug/invites/:code', inviteLimiter, (req: Request, res: Response) => {
-  const parsed = knockBodySchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'invalid_display_name' });
-    return;
+router.post(
+  "/sessions/:slug/invites/:code",
+  inviteLimiter,
+  (req: Request, res: Response) => {
+    const parsed = knockBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "invalid_display_name" });
+      return;
+    }
+    const session = store.getSession(req.params.slug);
+    if (!session) {
+      res.status(404).json({ error: "session_not_found" });
+      return;
+    }
+    if (session.frozen) {
+      res.status(423).json({ error: "session_frozen" });
+      return;
+    }
+    const redeemed = store.redeemInvite(
+      session,
+      req.params.code,
+      parsed.data.display_name
+    );
+    if (!redeemed) {
+      res.status(404).json({ error: "invite_invalid" });
+      return;
+    }
+    setSessionCookie(
+      res,
+      session.slug,
+      redeemed.token,
+      config.memberCookieMaxAgeS
+    );
+    // Tell the owner the invite was consumed so their invite list can refresh.
+    emitToOwner(session, "invite:used", {
+      code: req.params.code,
+      user_id: redeemed.member.user_id,
+      display_name: redeemed.member.display_name,
+    });
+    res.status(200).json({
+      slug: session.slug,
+      owner_user_id: session.owner_user_id,
+      user_id: redeemed.member.user_id,
+    });
   }
-  const session = store.getSession(req.params.slug);
-  if (!session) {
-    res.status(404).json({ error: 'session_not_found' });
-    return;
-  }
-  if (session.frozen) {
-    res.status(423).json({ error: 'session_frozen' });
-    return;
-  }
-  const redeemed = store.redeemInvite(session, req.params.code, parsed.data.display_name);
-  if (!redeemed) {
-    res.status(404).json({ error: 'invite_invalid' });
-    return;
-  }
-  setSessionCookie(res, session.slug, redeemed.token, config.memberCookieMaxAgeS);
-  // Tell the owner the invite was consumed so their invite list can refresh.
-  emitToOwner(session, 'invite:used', {
-    code: req.params.code,
-    user_id: redeemed.member.user_id,
-    display_name: redeemed.member.display_name,
-  });
-  res.status(200).json({
-    slug: session.slug,
-    owner_user_id: session.owner_user_id,
-    user_id: redeemed.member.user_id,
-  });
-});
+);
 
 // ---- GET /api/sessions/:slug (snapshot) ----------------------------------
 
-router.get('/sessions/:slug', requireMember, (req: Request, res: Response) => {
+router.get("/sessions/:slug", requireMember, (req: Request, res: Response) => {
   const session = req.session!;
   res.json({
     slug: session.slug,
@@ -277,12 +324,12 @@ router.get('/sessions/:slug', requireMember, (req: Request, res: Response) => {
 // ---- POST /api/sessions/:slug/files (upload) -----------------------------
 
 router.post(
-  '/sessions/:slug/files',
+  "/sessions/:slug/files",
   requireMember,
   blockIfFrozen,
   reserveUpload,
   (req: Request, res: Response, next: NextFunction) => {
-    upload.single('file')(req, res, (err: unknown) => {
+    upload.single("file")(req, res, (err: unknown) => {
       if (err) {
         const r = req.reservation;
         if (r && !r.done) {
@@ -290,11 +337,11 @@ router.post(
           r.done = true;
         }
         const code = (err as { code?: string }).code;
-        if (code === 'LIMIT_FILE_SIZE') {
-          res.status(413).json({ error: 'file_too_large' });
+        if (code === "LIMIT_FILE_SIZE") {
+          res.status(413).json({ error: "file_too_large" });
           return;
         }
-        res.status(400).json({ error: 'upload_failed' });
+        res.status(400).json({ error: "upload_failed" });
         return;
       }
       next();
@@ -307,7 +354,7 @@ router.post(
     if (!file) {
       store.releaseBytes(session, r.bytes);
       r.done = true;
-      res.status(400).json({ error: 'no_file' });
+      res.status(400).json({ error: "no_file" });
       return;
     }
 
@@ -321,7 +368,7 @@ router.post(
         store.releaseBytes(session, r.bytes);
         r.bytes = 0;
         r.done = true;
-        res.status(507).json({ error: 'insufficient_storage' });
+        res.status(507).json({ error: "insufficient_storage" });
         return;
       }
     } else if (file.size < r.bytes) {
@@ -334,74 +381,92 @@ router.post(
     const entry = store.addBucketEntry(session, {
       name,
       size: file.size,
-      content_type: file.mimetype || 'application/octet-stream',
+      content_type: file.mimetype || "application/octet-stream",
       data: file.buffer,
       uploader_id: req.user_id!,
     });
 
     const pub = store.publicBucketEntry(entry);
-    emitToSession(session.slug, 'file:added', { entry: pub });
+    emitToSession(session.slug, "file:added", { entry: pub });
     res.status(201).json(pub);
-  },
+  }
 );
 
 // ---- GET /api/sessions/:slug/files/:id (download) ------------------------
 
-router.get('/sessions/:slug/files/:id', requireMember, blockIfFrozen, (req: Request, res: Response) => {
-  const session = req.session!;
-  const entry = session.bucket.get(req.params.id);
-  if (!entry) {
-    res.status(404).json({ error: 'file_not_found' });
-    return;
+router.get(
+  "/sessions/:slug/files/:id",
+  requireMember,
+  blockIfFrozen,
+  (req: Request, res: Response) => {
+    const session = req.session!;
+    const entry = session.bucket.get(req.params.id);
+    if (!entry) {
+      res.status(404).json({ error: "file_not_found" });
+      return;
+    }
+    res.setHeader("Content-Type", entry.content_type);
+    res.setHeader("Content-Length", entry.size);
+    // entry.name is already canonical ASCII.
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${entry.name}"`
+    );
+    res.send(entry.data);
   }
-  res.setHeader('Content-Type', entry.content_type);
-  res.setHeader('Content-Length', entry.size);
-  // entry.name is already canonical ASCII.
-  res.setHeader('Content-Disposition', `attachment; filename="${entry.name}"`);
-  res.send(entry.data);
-});
+);
 
 // ---- DELETE /api/sessions/:slug/files/:id --------------------------------
 
-router.delete('/sessions/:slug/files/:id', requireMember, blockIfFrozen, (req: Request, res: Response) => {
-  const session = req.session!;
-  const entry = session.bucket.get(req.params.id);
-  if (!entry) {
-    res.status(404).json({ error: 'file_not_found' });
-    return;
+router.delete(
+  "/sessions/:slug/files/:id",
+  requireMember,
+  blockIfFrozen,
+  (req: Request, res: Response) => {
+    const session = req.session!;
+    const entry = session.bucket.get(req.params.id);
+    if (!entry) {
+      res.status(404).json({ error: "file_not_found" });
+      return;
+    }
+    // The uploader can always delete their own file; the owner can delete any
+    // file (including files orphaned by members who have left).
+    if (entry.uploader_id !== req.user_id && !req.member?.is_owner) {
+      res.status(403).json({ error: "not_uploader" });
+      return;
+    }
+    store.removeBucketEntry(session, req.params.id);
+    emitToSession(session.slug, "file:removed", { id: req.params.id });
+    res.status(204).end();
   }
-  // The uploader can always delete their own file; the owner can delete any
-  // file (including files orphaned by members who have left).
-  if (entry.uploader_id !== req.user_id && !req.member?.is_owner) {
-    res.status(403).json({ error: 'not_uploader' });
-    return;
-  }
-  store.removeBucketEntry(session, req.params.id);
-  emitToSession(session.slug, 'file:removed', { id: req.params.id });
-  res.status(204).end();
-});
+);
 
 // ---- DELETE /api/sessions/:slug/orphaned-files (owner) -------------------
 
-router.delete('/sessions/:slug/orphaned-files', requireOwner, blockIfFrozen, (req: Request, res: Response) => {
-  const session = req.session!;
-  const ids = store.removeOrphanedFiles(session);
-  for (const id of ids) emitToSession(session.slug, 'file:removed', { id });
-  res.json({ removed: ids.length });
-});
+router.delete(
+  "/sessions/:slug/orphaned-files",
+  requireOwner,
+  blockIfFrozen,
+  (req: Request, res: Response) => {
+    const session = req.session!;
+    const ids = store.removeOrphanedFiles(session);
+    for (const id of ids) emitToSession(session.slug, "file:removed", { id });
+    res.json({ removed: ids.length });
+  }
+);
 
 // ---- DELETE /api/sessions/:slug/members/:userId/files (owner) ------------
 
 router.delete(
-  '/sessions/:slug/members/:userId/files',
+  "/sessions/:slug/members/:userId/files",
   requireOwner,
   blockIfFrozen,
   (req: Request, res: Response) => {
     const session = req.session!;
     const ids = store.removeFilesByUploader(session, req.params.userId);
-    for (const id of ids) emitToSession(session.slug, 'file:removed', { id });
+    for (const id of ids) emitToSession(session.slug, "file:removed", { id });
     res.json({ removed: ids.length });
-  },
+  }
 );
 
 // ---- GET /api/turn -------------------------------------------------------
@@ -417,17 +482,19 @@ export function healthHandler(_req: Request, res: Response): void {
     members: store.memberCount(),
     transfers_in_flight: store.inFlightTransferCount(),
     total_bytes: store.totalBytesGlobal,
-    total_bytes_pct_of_cap: Math.round((store.totalBytesGlobal / config.maxTotalBytes) * 100),
+    total_bytes_pct_of_cap: Math.round(
+      (store.totalBytesGlobal / config.maxTotalBytes) * 100
+    ),
   });
 }
 
-router.get('/turn', (req: Request, res: Response) => {
+router.get("/turn", (req: Request, res: Response) => {
   // requireMember needs a slug param; TURN config is global so we accept any
   // valid member cookie, resolved via the `slug` query param.
-  req.params.slug = normalizeSlug((req.query.slug as string) ?? '');
+  req.params.slug = normalizeSlug((req.query.slug as string) ?? "");
   requireMember(req, res, () => {
     if (req.session?.frozen) {
-      res.status(423).json({ error: 'session_frozen' });
+      res.status(423).json({ error: "session_frozen" });
       return;
     }
     res.json({ iceServers: iceServers() });

@@ -12,7 +12,10 @@ export const MAX_TRANSFER_FILES = 32;
 const FLAG_LAST = 0x01;
 
 export function isFsaaAvailable(): boolean {
-  return typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function';
+  return (
+    typeof window !== "undefined" &&
+    typeof window.showSaveFilePicker === "function"
+  );
 }
 
 interface ManifestFile {
@@ -42,12 +45,12 @@ export interface PeerCallbacks {
 }
 
 const FAILURE_MESSAGE =
-  'Connection failed — your network may not allow P2P. Try the bucket upload instead.';
+  "Connection failed — your network may not allow P2P. Try the bucket upload instead.";
 
 /** Shared ICE-state monitoring; promotes the listed states to a terminal failure. No restart-ICE. */
 function attachIceMonitoring(
   pc: RTCPeerConnection,
-  fail: (reason: string, message: string) => void,
+  fail: (reason: string, message: string) => void
 ): () => void {
   let disconnectedTimer: ReturnType<typeof setTimeout> | null = null;
   let checkingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -61,32 +64,34 @@ function attachIceMonitoring(
 
   const onChange = () => {
     switch (pc.iceConnectionState) {
-      case 'failed':
+      case "failed":
         clearTimers();
-        fail('ice_failed', FAILURE_MESSAGE);
+        fail("ice_failed", FAILURE_MESSAGE);
         break;
-      case 'disconnected':
+      case "disconnected":
         if (!disconnectedTimer) {
           disconnectedTimer = setTimeout(() => {
-            if (pc.iceConnectionState === 'disconnected') fail('ice_failed', FAILURE_MESSAGE);
+            if (pc.iceConnectionState === "disconnected")
+              fail("ice_failed", FAILURE_MESSAGE);
           }, 10_000);
         }
         break;
-      case 'checking':
+      case "checking":
         if (!checkingTimer) {
           checkingTimer = setTimeout(() => {
-            if (pc.iceConnectionState === 'checking') fail('ice_failed', FAILURE_MESSAGE);
+            if (pc.iceConnectionState === "checking")
+              fail("ice_failed", FAILURE_MESSAGE);
           }, 30_000);
         }
         break;
-      case 'connected':
-      case 'completed':
+      case "connected":
+      case "completed":
         clearTimers();
         break;
     }
   };
 
-  pc.addEventListener('iceconnectionstatechange', onChange);
+  pc.addEventListener("iceconnectionstatechange", onChange);
   return clearTimers;
 }
 
@@ -95,15 +100,15 @@ function waitForDrain(dc: RTCDataChannel): Promise<void> {
   return new Promise((resolve, reject) => {
     dc.bufferedAmountLowThreshold = LOW_WATER;
     const timer = setTimeout(() => {
-      dc.removeEventListener('bufferedamountlow', onLow);
-      reject(new Error('drain_timeout'));
+      dc.removeEventListener("bufferedamountlow", onLow);
+      reject(new Error("drain_timeout"));
     }, DRAIN_TIMEOUT_MS);
     const onLow = () => {
       clearTimeout(timer);
-      dc.removeEventListener('bufferedamountlow', onLow);
+      dc.removeEventListener("bufferedamountlow", onLow);
       resolve();
     };
-    dc.addEventListener('bufferedamountlow', onLow);
+    dc.addEventListener("bufferedamountlow", onLow);
   });
 }
 
@@ -124,14 +129,19 @@ export class SenderConnection {
   private readyResolve: (() => void) | null = null;
   private readyTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(transferId: string, files: File[], iceServers: RTCIceServer[], cb: PeerCallbacks) {
+  constructor(
+    transferId: string,
+    files: File[],
+    iceServers: RTCIceServer[],
+    cb: PeerCallbacks
+  ) {
     this.transferId = transferId;
     this.files = files;
     this.cb = cb;
     this.total = files.reduce((n, f) => n + f.size, 0);
     this.pc = new RTCPeerConnection({ iceServers });
-    this.dc = this.pc.createDataChannel('files', { ordered: true });
-    this.dc.binaryType = 'arraybuffer';
+    this.dc = this.pc.createDataChannel("files", { ordered: true });
+    this.dc.binaryType = "arraybuffer";
 
     this.clearIce = attachIceMonitoring(this.pc, (r, m) => this.fail(r, m));
     this.pc.onicecandidate = (e) => {
@@ -139,19 +149,20 @@ export class SenderConnection {
     };
     this.dc.onopen = () => void this.pump();
     this.dc.onmessage = (ev) => this.onControl(ev.data);
-    this.dc.onerror = () => this.fail('datachannel_error', 'Transfer interrupted');
+    this.dc.onerror = () =>
+      this.fail("datachannel_error", "Transfer interrupted");
   }
 
   /** Receiver -> sender control channel. Currently only the `ready` ack. */
   private onControl(data: unknown): void {
-    if (typeof data !== 'string') return;
+    if (typeof data !== "string") return;
     let msg: { type?: string };
     try {
       msg = JSON.parse(data) as { type?: string };
     } catch {
       return;
     }
-    if (msg.type === 'ready') this.markReady();
+    if (msg.type === "ready") this.markReady();
   }
 
   private markReady(): void {
@@ -172,7 +183,7 @@ export class SenderConnection {
       this.readyTimer = setTimeout(() => {
         this.readyResolve = null;
         this.readyTimer = null;
-        reject(new Error('receiver_timeout'));
+        reject(new Error("receiver_timeout"));
       }, READY_TIMEOUT_MS);
     });
   }
@@ -202,7 +213,7 @@ export class SenderConnection {
         index,
         name: f.name,
         size: f.size,
-        mime: f.type || 'application/octet-stream',
+        mime: f.type || "application/octet-stream",
       })),
     };
     this.dc.send(JSON.stringify(manifest));
@@ -213,7 +224,10 @@ export class SenderConnection {
     try {
       await this.waitForReady();
     } catch {
-      this.fail('receiver_timeout', 'The other person did not start receiving in time.');
+      this.fail(
+        "receiver_timeout",
+        "The other person did not start receiving in time."
+      );
       return;
     }
     if (this.cancelled) return;
@@ -241,13 +255,16 @@ export class SenderConnection {
         try {
           await waitForDrain(this.dc);
         } catch {
-          this.fail('stalled', 'Transfer stalled — the connection appears to be stuck.');
+          this.fail(
+            "stalled",
+            "Transfer stalled — the connection appears to be stuck."
+          );
           return;
         }
       }
     }
     if (this.cancelled) return;
-    this.dc.send(JSON.stringify({ type: 'done' }));
+    this.dc.send(JSON.stringify({ type: "done" }));
     this.completed = true;
     this.cb.onComplete();
     // The transfer is done. Stop ICE monitoring so the receiver tearing down its
@@ -335,7 +352,7 @@ export class ReceiverConnection {
     this.pc.ondatachannel = (e) => {
       const dc = e.channel;
       this.dc = dc;
-      dc.binaryType = 'arraybuffer';
+      dc.binaryType = "arraybuffer";
       dc.onmessage = (ev) => this.enqueue(ev.data);
       // The sender tears the connection down right after it flushes the final
       // bytes, so both `error` (e.g. SCTP "User-Initiated Abort") and `close`
@@ -363,9 +380,11 @@ export class ReceiverConnection {
 
   /** Append to the serial processing chain so messages are handled in order. */
   private enqueue(data: string | ArrayBuffer): void {
-    this.queue = this.queue.then(() => this.onMessage(data)).catch(() => {
-      this.fail('protocol_error', 'Transfer failed: malformed data.');
-    });
+    this.queue = this.queue
+      .then(() => this.onMessage(data))
+      .catch(() => {
+        this.fail("protocol_error", "Transfer failed: malformed data.");
+      });
   }
 
   async acceptOffer(sdp: RTCSessionDescriptionInit): Promise<void> {
@@ -385,15 +404,18 @@ export class ReceiverConnection {
 
   private async onMessage(data: string | ArrayBuffer): Promise<void> {
     if (this.cancelled) return;
-    if (typeof data === 'string') {
+    if (typeof data === "string") {
       let msg: { type?: string } & Partial<Manifest>;
       try {
         msg = JSON.parse(data) as { type?: string } & Partial<Manifest>;
       } catch {
-        this.fail('protocol_error', 'Transfer failed: malformed control message.');
+        this.fail(
+          "protocol_error",
+          "Transfer failed: malformed control message."
+        );
         return;
       }
-      if (msg.type === 'done') {
+      if (msg.type === "done") {
         await this.finish();
         return;
       }
@@ -408,7 +430,10 @@ export class ReceiverConnection {
     this.total = manifest.files.reduce((n, f) => n + f.size, 0);
 
     if (!this.useFsaa && this.total > IN_MEMORY_CAP) {
-      this.fail('too_large', 'File exceeds the 1 GB in-memory limit for this browser.');
+      this.fail(
+        "too_large",
+        "File exceeds the 1 GB in-memory limit for this browser."
+      );
       return;
     }
 
@@ -416,10 +441,12 @@ export class ReceiverConnection {
       const sink: FileSink = { meta, received: 0, done: false };
       if (this.useFsaa) {
         try {
-          const handle = await window.showSaveFilePicker({ suggestedName: meta.name });
+          const handle = await window.showSaveFilePicker({
+            suggestedName: meta.name,
+          });
           sink.writable = await handle.createWritable();
         } catch {
-          this.fail('save_cancelled', 'Save was cancelled.');
+          this.fail("save_cancelled", "Save was cancelled.");
           return;
         }
       } else {
@@ -430,9 +457,9 @@ export class ReceiverConnection {
 
     // Sinks are ready; tell the sender it can start streaming bytes.
     try {
-      this.dc?.send(JSON.stringify({ type: 'ready' }));
+      this.dc?.send(JSON.stringify({ type: "ready" }));
     } catch {
-      this.fail('connection_interrupted', 'Transfer interrupted');
+      this.fail("connection_interrupted", "Transfer interrupted");
     }
   }
 
@@ -446,7 +473,7 @@ export class ReceiverConnection {
     sink.received += payload.byteLength;
     this.received += payload.byteLength;
     if (sink.received > sink.meta.size) {
-      this.fail('size_mismatch', 'Received more data than expected.');
+      this.fail("size_mismatch", "Received more data than expected.");
       return;
     }
 
@@ -464,7 +491,7 @@ export class ReceiverConnection {
 
     if (flags & FLAG_LAST) {
       if (sink.received !== sink.meta.size) {
-        this.fail('size_mismatch', 'File size did not match.');
+        this.fail("size_mismatch", "File size did not match.");
         return;
       }
       await this.closeSink(sink);
@@ -476,9 +503,11 @@ export class ReceiverConnection {
     if (sink.writable) {
       await sink.writable.close();
     } else if (sink.chunks) {
-      const blob = new Blob(sink.chunks as BlobPart[], { type: sink.meta.mime });
+      const blob = new Blob(sink.chunks as BlobPart[], {
+        type: sink.meta.mime,
+      });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = sink.meta.name;
       document.body.appendChild(a);
@@ -499,7 +528,7 @@ export class ReceiverConnection {
 
   private async finish(): Promise<void> {
     if (!this.allDone()) {
-      this.fail('incomplete', 'Transfer ended before all files arrived.');
+      this.fail("incomplete", "Transfer ended before all files arrived.");
       return;
     }
     this.completed = true;

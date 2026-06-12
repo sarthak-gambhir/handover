@@ -35,7 +35,7 @@ export function TransferProgressRow({
     <li
       className={cx(
         "transfer_progress_row",
-        `transfer_progress_row_${transfer.status}`,
+        `transfer_progress_row_${transfer.status}`
       )}
     >
       <span className="transfer_progress_row_icon">

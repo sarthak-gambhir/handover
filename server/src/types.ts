@@ -35,14 +35,14 @@ export type BucketEntry = {
 };
 
 export type TransferStateName =
-  | 'requested'
-  | 'accepted'
-  | 'declined'
-  | 'offering'
-  | 'answered'
-  | 'closed'
-  | 'cancelled'
-  | 'expired';
+  | "requested"
+  | "accepted"
+  | "declined"
+  | "offering"
+  | "answered"
+  | "closed"
+  | "cancelled"
+  | "expired";
 
 export type TransferFileMeta = { name: string; size: number };
 
@@ -75,7 +75,11 @@ export type Session = {
   frozen: boolean;
   // Outstanding ownership offer; only the named member may accept it, and only
   // while it has not expired. Null when no offer is in flight.
-  pending_owner_offer: { to_user_id: string; from_user_id: string; created_at: number } | null;
+  pending_owner_offer: {
+    to_user_id: string;
+    from_user_id: string;
+    created_at: number;
+  } | null;
 };
 
 // Public projections (never leak tokens / socket ids / buffers)
@@ -96,8 +100,8 @@ export type PublicBucketEntry = {
 };
 
 export const TERMINAL_STATES: ReadonlySet<TransferStateName> = new Set([
-  'declined',
-  'closed',
-  'cancelled',
-  'expired',
+  "declined",
+  "closed",
+  "cancelled",
+  "expired",
 ]);

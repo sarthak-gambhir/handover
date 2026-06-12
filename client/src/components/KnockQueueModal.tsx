@@ -55,7 +55,7 @@ export function KnockQueueModal({
     return knockers.filter(
       (k) =>
         k.display_name.toLowerCase().includes(q) ||
-        k.knock_id.toLowerCase().includes(q.replace(/^#/, "")),
+        k.knock_id.toLowerCase().includes(q.replace(/^#/, ""))
     );
   }, [knockers, query]);
 
@@ -156,8 +156,8 @@ export function KnockQueueModal({
                 onChange={toggleAll}
               />
               <span>
-                Select all{query.trim() ? " matching" : ""} ({filteredIds.length}
-                )
+                Select all{query.trim() ? " matching" : ""} (
+                {filteredIds.length})
               </span>
             </label>
             <ul className="knock_modal_list">

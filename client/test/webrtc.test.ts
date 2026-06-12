@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   SenderConnection,
   ReceiverConnection,
   type PeerCallbacks,
-} from '../src/lib/webrtc';
+} from "../src/lib/webrtc";
 
 // A self-contained fake WebRTC + File System Access environment. Two
 // FakeDataChannels are wired peer-to-peer so the real sender/receiver protocol
@@ -20,10 +20,10 @@ let captured: Map<string, Uint8Array[]>;
 type AnyFn = (...args: any[]) => void;
 
 class FakeDataChannel {
-  binaryType = 'blob';
+  binaryType = "blob";
   bufferedAmount = 0;
   bufferedAmountLowThreshold = 0;
-  readyState = 'open';
+  readyState = "open";
   onopen: (() => void) | null = null;
   onmessage: ((ev: { data: unknown }) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -47,7 +47,7 @@ class FakeDataChannel {
   send(data: unknown) {
     if (this.closed || !this.peer) return;
     const peer = this.peer;
-    if (typeof data === 'string') {
+    if (typeof data === "string") {
       queueMicrotask(() => peer.onmessage?.({ data }));
       return;
     }
@@ -57,7 +57,7 @@ class FakeDataChannel {
       this.bufferedAmount = HIGH_WATER + 1;
       queueMicrotask(() => {
         this.bufferedAmount = 0;
-        this.dispatch('bufferedamountlow');
+        this.dispatch("bufferedamountlow");
       });
     }
     queueMicrotask(() => peer.onmessage?.({ data: ab }));
@@ -66,7 +66,7 @@ class FakeDataChannel {
   close() {
     if (this.closed) return;
     this.closed = true;
-    this.readyState = 'closed';
+    this.readyState = "closed";
     // The close event is asynchronous in real WebRTC: already-sent messages are
     // still delivered first. Defer to a macrotask so queued onmessage handling
     // (and the receiver's promise chain) completes before onclose fires. Some
@@ -75,7 +75,7 @@ class FakeDataChannel {
     const peer = this.peer;
     if (peer && !peer.closed) {
       peer.closed = true;
-      peer.readyState = 'closed';
+      peer.readyState = "closed";
       if (ERROR_ON_CLOSE) setTimeout(() => peer.onerror?.(), 0);
       setTimeout(() => peer.onclose?.(), 0);
     }
@@ -85,7 +85,7 @@ class FakeDataChannel {
 const pcs: FakePeerConnection[] = [];
 
 class FakePeerConnection {
-  iceConnectionState = 'new';
+  iceConnectionState = "new";
   onicecandidate: ((e: { candidate: unknown }) => void) | null = null;
   ondatachannel: ((e: { channel: FakeDataChannel }) => void) | null = null;
   localDc: FakeDataChannel | null = null;
@@ -102,10 +102,10 @@ class FakePeerConnection {
     return dc;
   }
   createOffer() {
-    return Promise.resolve({ type: 'offer', sdp: 'offer-sdp' });
+    return Promise.resolve({ type: "offer", sdp: "offer-sdp" });
   }
   createAnswer() {
-    return Promise.resolve({ type: 'answer', sdp: 'answer-sdp' });
+    return Promise.resolve({ type: "answer", sdp: "answer-sdp" });
   }
   setLocalDescription() {
     return Promise.resolve();
@@ -134,7 +134,11 @@ class FakePeerConnection {
   close() {}
 }
 
-function fakeFile(name: string, bytes: Uint8Array, mime = 'application/octet-stream'): File {
+function fakeFile(
+  name: string,
+  bytes: Uint8Array,
+  mime = "application/octet-stream"
+): File {
   return {
     name,
     size: bytes.byteLength,
@@ -143,7 +147,9 @@ function fakeFile(name: string, bytes: Uint8Array, mime = 'application/octet-str
       const sub = bytes.subarray(start, end);
       return {
         arrayBuffer: () =>
-          Promise.resolve(sub.buffer.slice(sub.byteOffset, sub.byteOffset + sub.byteLength)),
+          Promise.resolve(
+            sub.buffer.slice(sub.byteOffset, sub.byteOffset + sub.byteLength)
+          ),
       };
     },
   } as unknown as File;
@@ -159,7 +165,8 @@ function installFsaa() {
       return {
         createWritable: async () => ({
           write: async (chunk: Uint8Array) => {
-            if (writeDelayMs) await new Promise((r) => setTimeout(r, writeDelayMs));
+            if (writeDelayMs)
+              await new Promise((r) => setTimeout(r, writeDelayMs));
             parts.push(new Uint8Array(chunk));
           },
           close: async () => {},
@@ -225,7 +232,7 @@ async function runTransfer(files: File[]): Promise<TransferResult> {
   };
 
   const receiver = new ReceiverConnection([], cbR);
-  const sender = new SenderConnection('t1', files, [], cbS);
+  const sender = new SenderConnection("t1", files, [], cbS);
   cbS.sendOffer = (sdp) => void receiver.acceptOffer(sdp);
   cbR.sendAnswer = (sdp) => void sender.acceptAnswer(sdp);
 
@@ -255,79 +262,79 @@ afterEach(() => {
   delete (globalThis as any).window;
 });
 
-describe('webrtc transfer protocol', () => {
-  it('delivers a single multi-chunk file byte-for-byte', async () => {
+describe("webrtc transfer protocol", () => {
+  it("delivers a single multi-chunk file byte-for-byte", async () => {
     // ~3.5 chunks at 16 KB so framing/offset logic is exercised.
     const bytes = randomBytes(57_000);
-    const res = await runTransfer([fakeFile('a.bin', bytes)]);
+    const res = await runTransfer([fakeFile("a.bin", bytes)]);
 
     expect(res.failures).toEqual([]);
     expect(res.senderDone).toBe(true);
     expect(res.receiverDone).toBe(true);
-    expect(concat(captured.get('a.bin')!)).toEqual(bytes);
+    expect(concat(captured.get("a.bin")!)).toEqual(bytes);
   });
 
-  it('delivers multiple files in order with correct contents', async () => {
+  it("delivers multiple files in order with correct contents", async () => {
     const a = randomBytes(20_000);
     const b = randomBytes(40);
     const c = randomBytes(33_000);
     const res = await runTransfer([
-      fakeFile('a.bin', a),
-      fakeFile('b.bin', b),
-      fakeFile('c.bin', c),
+      fakeFile("a.bin", a),
+      fakeFile("b.bin", b),
+      fakeFile("c.bin", c),
     ]);
 
     expect(res.failures).toEqual([]);
-    expect(concat(captured.get('a.bin')!)).toEqual(a);
-    expect(concat(captured.get('b.bin')!)).toEqual(b);
-    expect(concat(captured.get('c.bin')!)).toEqual(c);
+    expect(concat(captured.get("a.bin")!)).toEqual(a);
+    expect(concat(captured.get("b.bin")!)).toEqual(b);
+    expect(concat(captured.get("c.bin")!)).toEqual(c);
   });
 
-  it('drops no early chunks when the save picker resolves slowly (serialized + ready ack)', async () => {
+  it("drops no early chunks when the save picker resolves slowly (serialized + ready ack)", async () => {
     pickerDelayMs = 25;
     const bytes = randomBytes(50_000);
-    const res = await runTransfer([fakeFile('slow.bin', bytes)]);
+    const res = await runTransfer([fakeFile("slow.bin", bytes)]);
 
     expect(res.failures).toEqual([]);
-    expect(concat(captured.get('slow.bin')!)).toEqual(bytes);
+    expect(concat(captured.get("slow.bin")!)).toEqual(bytes);
   });
 
-  it('does not spuriously fail when the channel closes while writes are still draining', async () => {
+  it("does not spuriously fail when the channel closes while writes are still draining", async () => {
     // The sender closes the data channel right after flushing `done`, so the
     // close event can land before the receiver has finished processing its
     // queued chunks. The receiver must defer its completeness check to the end
     // of the queue rather than failing with `connection_interrupted`.
     writeDelayMs = 5;
     const bytes = randomBytes(50_000);
-    const res = await runTransfer([fakeFile('drain.bin', bytes)]);
+    const res = await runTransfer([fakeFile("drain.bin", bytes)]);
 
     expect(res.failures).toEqual([]);
     expect(res.receiverDone).toBe(true);
-    expect(concat(captured.get('drain.bin')!)).toEqual(bytes);
+    expect(concat(captured.get("drain.bin")!)).toEqual(bytes);
   });
 
-  it('does not spuriously fail when the channel raises error+close during teardown', async () => {
+  it("does not spuriously fail when the channel raises error+close during teardown", async () => {
     // Browsers often fire `error` (e.g. SCTP "User-Initiated Abort") on the
     // receiver as the sender tears down, right after the last bytes land. With
     // slow writes still draining, that must not flip a saved file to failed.
     ERROR_ON_CLOSE = true;
     writeDelayMs = 5;
     const bytes = randomBytes(50_000);
-    const res = await runTransfer([fakeFile('teardown.bin', bytes)]);
+    const res = await runTransfer([fakeFile("teardown.bin", bytes)]);
 
     expect(res.failures).toEqual([]);
     expect(res.receiverDone).toBe(true);
-    expect(concat(captured.get('teardown.bin')!)).toEqual(bytes);
+    expect(concat(captured.get("teardown.bin")!)).toEqual(bytes);
   });
 
-  it('completes correctly while backpressure pauses and resumes the sender', async () => {
+  it("completes correctly while backpressure pauses and resumes the sender", async () => {
     BACKPRESSURE = true;
     const bytes = randomBytes(80_000);
-    const res = await runTransfer([fakeFile('bp.bin', bytes)]);
+    const res = await runTransfer([fakeFile("bp.bin", bytes)]);
 
     expect(res.failures).toEqual([]);
     expect(res.senderDone).toBe(true);
     expect(res.receiverDone).toBe(true);
-    expect(concat(captured.get('bp.bin')!)).toEqual(bytes);
+    expect(concat(captured.get("bp.bin")!)).toEqual(bytes);
   });
 });

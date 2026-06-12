@@ -3,9 +3,9 @@
 // page refresh via sessionStorage so reconnects from the same tab are treated
 // as resumption, not a second-tab collision.
 
-import { randomId } from './id';
+import { randomId } from "./id";
 
-const TAB_KEY = 'handover_tab_id';
+const TAB_KEY = "handover_tab_id";
 
 interface SessionState {
   slug: string | null;

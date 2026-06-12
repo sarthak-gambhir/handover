@@ -64,7 +64,7 @@ function ToastItem({
       className={cx(
         "toast",
         `toast_${entry.variant}`,
-        exiting && "toast_exiting",
+        exiting && "toast_exiting"
       )}
       role="status"
     >
@@ -80,7 +80,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const close = useCallback((id: number) => {
     setToasts((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, open: false } : t)),
+      prev.map((t) => (t.id === id ? { ...t, open: false } : t))
     );
   }, []);
 
@@ -94,7 +94,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setToasts((prev) => [...prev, { id, message, variant, open: true }]);
       setTimeout(() => close(id), 4000);
     },
-    [close],
+    [close]
   );
 
   return (
@@ -106,7 +106,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <ToastItem key={t.id} entry={t} onRemove={remove} />
           ))}
         </div>,
-        document.body,
+        document.body
       )}
     </ToastContext.Provider>
   );

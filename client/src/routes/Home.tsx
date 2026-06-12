@@ -149,6 +149,8 @@ export function Home() {
                   </p>
                 </div>
 
+                <hr className="horizontal_divider" />
+
                 <form className="home_form" onSubmit={onCreate}>
                   <Input
                     label="Your name"
@@ -185,6 +187,9 @@ export function Home() {
                     session ends.
                   </p>
                 </div>
+
+                <hr className="horizontal_divider" />
+
                 <form className="home_form" onSubmit={onKnock}>
                   <Input
                     label="Session ID"

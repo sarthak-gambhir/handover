@@ -34,7 +34,7 @@ export function MemberRow({
   // The menu is portaled to <body> so a scrollable roster can't clip it; we
   // anchor it to the trigger with a fixed position computed on open.
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(
-    null,
+    null
   );
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -157,7 +157,7 @@ export function MemberRow({
                       Kick
                     </button>
                   </div>,
-                  document.body,
+                  document.body
                 )}
             </div>
           )}

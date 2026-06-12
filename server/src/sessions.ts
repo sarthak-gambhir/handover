@@ -1,6 +1,6 @@
-import { EventEmitter } from 'node:events';
-import { randomBytes, randomUUID } from 'node:crypto';
-import { config } from './config.js';
+import { EventEmitter } from "node:events";
+import { randomBytes, randomUUID } from "node:crypto";
+import { config } from "./config.js";
 import {
   type Session,
   type Member,
@@ -13,26 +13,36 @@ import {
   type PublicMember,
   type PublicBucketEntry,
   TERMINAL_STATES,
-} from './types.js';
-import { normalizeSlug, makeUniqueSlug } from './slug.js';
+} from "./types.js";
+import { normalizeSlug, makeUniqueSlug } from "./slug.js";
 
 function newToken(): string {
-  return randomBytes(32).toString('base64url');
+  return randomBytes(32).toString("base64url");
 }
 
 function newId(): string {
-  return randomBytes(16).toString('hex');
+  return randomBytes(16).toString("hex");
 }
 
 export type TokenEntry =
-  | { token: string; slug: string; status: 'pending'; knock_id: string }
-  | { token: string; slug: string; status: 'member'; user_id: string; is_owner: boolean };
+  | { token: string; slug: string; status: "pending"; knock_id: string }
+  | {
+      token: string;
+      slug: string;
+      status: "member";
+      user_id: string;
+      is_owner: boolean;
+    };
 
 export type StoreEvents = {
-  'knock:expired': { slug: string; knock_id: string; socket_id: string | null };
-  'session:ended': { slug: string; reason: string };
-  'transfer:expired': { slug: string; transfer: TransferState };
-  'owner_offer:expired': { slug: string; to_user_id: string; from_user_id: string };
+  "knock:expired": { slug: string; knock_id: string; socket_id: string | null };
+  "session:ended": { slug: string; reason: string };
+  "transfer:expired": { slug: string; transfer: TransferState };
+  "owner_offer:expired": {
+    slug: string;
+    to_user_id: string;
+    from_user_id: string;
+  };
 };
 
 /**
@@ -49,7 +59,11 @@ export class Store extends EventEmitter {
 
   // ---- session lifecycle -------------------------------------------------
 
-  createSession(displayName = 'Owner'): { session: Session; ownerToken: string; ownerUserId: string } {
+  createSession(displayName = "Owner"): {
+    session: Session;
+    ownerToken: string;
+    ownerUserId: string;
+  } {
     const slug = makeUniqueSlug((s) => this.sessions.has(s));
     const ownerUserId = randomUUID();
     const ownerToken = newToken();
@@ -87,7 +101,7 @@ export class Store extends EventEmitter {
     this.tokens.set(ownerToken, {
       token: ownerToken,
       slug,
-      status: 'member',
+      status: "member",
       user_id: ownerUserId,
       is_owner: true,
     });
@@ -117,12 +131,15 @@ export class Store extends EventEmitter {
       if (m.offline_grace_timer) clearTimeout(m.offline_grace_timer);
     }
     this.sessions.delete(session.slug);
-    this.emit('session:ended', { slug: session.slug, reason });
+    this.emit("session:ended", { slug: session.slug, reason });
   }
 
   // ---- knockers ----------------------------------------------------------
 
-  addKnocker(session: Session, displayName: string): { knocker: Knocker; token: string } {
+  addKnocker(
+    session: Session,
+    displayName: string
+  ): { knocker: Knocker; token: string } {
     const knock_id = newId();
     const token = newToken();
     const knocker: Knocker = {
@@ -133,7 +150,12 @@ export class Store extends EventEmitter {
       created_at: Date.now(),
     };
     session.knockers.set(knock_id, knocker);
-    this.tokens.set(token, { token, slug: session.slug, status: 'pending', knock_id });
+    this.tokens.set(token, {
+      token,
+      slug: session.slug,
+      status: "pending",
+      knock_id,
+    });
     this.touch(session);
     return { knocker, token };
   }
@@ -150,7 +172,11 @@ export class Store extends EventEmitter {
    * Create a non-owner member bound to `token`, register the token as a member
    * entry, and add them to the roster. Shared by knock-admit and invite-redeem.
    */
-  private makeMember(session: Session, displayName: string, token: string): Member {
+  private makeMember(
+    session: Session,
+    displayName: string,
+    token: string
+  ): Member {
     const user_id = randomUUID();
     const now = Date.now();
     const member: Member = {
@@ -168,7 +194,7 @@ export class Store extends EventEmitter {
     this.tokens.set(token, {
       token,
       slug: session.slug,
-      status: 'member',
+      status: "member",
       user_id,
       is_owner: false,
     });
@@ -182,7 +208,11 @@ export class Store extends EventEmitter {
     if (!knocker) return undefined;
     session.knockers.delete(knock_id);
     // Reuse the pending token, upgrading its index entry pending -> member.
-    return this.makeMember(session, knocker.display_name, knocker.session_token);
+    return this.makeMember(
+      session,
+      knocker.display_name,
+      knocker.session_token
+    );
   }
 
   // ---- invites -----------------------------------------------------------
@@ -216,7 +246,9 @@ export class Store extends EventEmitter {
   /** Active (non-expired) invites, newest first. Prunes expired entries. */
   listInvites(session: Session, now = Date.now()): Invite[] {
     this.pruneInvites(session, now);
-    return [...session.invites.values()].sort((a, b) => b.created_at - a.created_at);
+    return [...session.invites.values()].sort(
+      (a, b) => b.created_at - a.created_at
+    );
   }
 
   /** Revoke a specific invite code. Returns true if one was removed. */
@@ -233,7 +265,7 @@ export class Store extends EventEmitter {
   redeemInvite(
     session: Session,
     code: string,
-    displayName: string,
+    displayName: string
   ): { member: Member; token: string } | undefined {
     const invite = session.invites.get(code);
     if (!invite || invite.expires_at <= Date.now()) {
@@ -249,7 +281,11 @@ export class Store extends EventEmitter {
 
   // ---- members -----------------------------------------------------------
 
-  removeMember(session: Session, user_id: string, purgeFiles = true): Member | undefined {
+  removeMember(
+    session: Session,
+    user_id: string,
+    purgeFiles = true
+  ): Member | undefined {
     const member = session.members.get(user_id);
     if (!member) return undefined;
     if (member.offline_grace_timer) clearTimeout(member.offline_grace_timer);
@@ -283,11 +319,11 @@ export class Store extends EventEmitter {
     if (prev) {
       prev.is_owner = false;
       const prevTok = this.tokens.get(prev.session_token);
-      if (prevTok && prevTok.status === 'member') prevTok.is_owner = false;
+      if (prevTok && prevTok.status === "member") prevTok.is_owner = false;
     }
     next.is_owner = true;
     const nextTok = this.tokens.get(next.session_token);
-    if (nextTok && nextTok.status === 'member') nextTok.is_owner = true;
+    if (nextTok && nextTok.status === "member") nextTok.is_owner = true;
     session.owner_user_id = to_user_id;
     session.pending_owner_offer = null;
     this.touch(session);
@@ -331,7 +367,7 @@ export class Store extends EventEmitter {
 
   addBucketEntry(
     session: Session,
-    entry: Omit<BucketEntry, 'id' | 'created_at'>,
+    entry: Omit<BucketEntry, "id" | "created_at">
   ): BucketEntry {
     const full: BucketEntry = { ...entry, id: newId(), created_at: Date.now() };
     session.bucket.set(full.id, full);
@@ -339,7 +375,10 @@ export class Store extends EventEmitter {
     return full;
   }
 
-  removeBucketEntry(session: Session, file_id: string): BucketEntry | undefined {
+  removeBucketEntry(
+    session: Session,
+    file_id: string
+  ): BucketEntry | undefined {
     const entry = session.bucket.get(file_id);
     if (!entry) return undefined;
     session.bucket.delete(file_id);
@@ -374,7 +413,7 @@ export class Store extends EventEmitter {
     session: Session,
     from_user_id: string,
     to_user_id: string,
-    files: TransferFileMeta[],
+    files: TransferFileMeta[]
   ): TransferState {
     const transfer_id = newId();
     const now = Date.now();
@@ -382,11 +421,11 @@ export class Store extends EventEmitter {
       transfer_id,
       from_user_id,
       to_user_id,
-      state: 'requested',
+      state: "requested",
       files,
       created_at: now,
       state_changed_at: now,
-      state_log: [{ state: 'requested', at: now }],
+      state_log: [{ state: "requested", at: now }],
     };
     session.transfers.set(transfer_id, transfer);
     this.touch(session);
@@ -403,24 +442,30 @@ export class Store extends EventEmitter {
   /** Cancel every non-terminal transfer a departing peer is part of. */
   cancelTransfersForUser(
     session: Session,
-    user_id: string,
+    user_id: string
   ): Array<{ transfer: TransferState; other_user_id: string }> {
-    const cancelled: Array<{ transfer: TransferState; other_user_id: string }> = [];
+    const cancelled: Array<{ transfer: TransferState; other_user_id: string }> =
+      [];
     for (const transfer of session.transfers.values()) {
       if (TERMINAL_STATES.has(transfer.state)) continue;
-      if (transfer.from_user_id !== user_id && transfer.to_user_id !== user_id) continue;
-      this.setTransferState(transfer, 'cancelled');
+      if (transfer.from_user_id !== user_id && transfer.to_user_id !== user_id)
+        continue;
+      this.setTransferState(transfer, "cancelled");
       const other =
-        transfer.from_user_id === user_id ? transfer.to_user_id : transfer.from_user_id;
+        transfer.from_user_id === user_id
+          ? transfer.to_user_id
+          : transfer.from_user_id;
       cancelled.push({ transfer, other_user_id: other });
     }
     return cancelled;
   }
 
   /** Cancel every non-terminal transfer in the session (used by freeze). */
-  cancelAllTransfers(
-    session: Session,
-  ): Array<{ transfer: TransferState; from_user_id: string; to_user_id: string }> {
+  cancelAllTransfers(session: Session): Array<{
+    transfer: TransferState;
+    from_user_id: string;
+    to_user_id: string;
+  }> {
     const cancelled: Array<{
       transfer: TransferState;
       from_user_id: string;
@@ -428,7 +473,7 @@ export class Store extends EventEmitter {
     }> = [];
     for (const transfer of session.transfers.values()) {
       if (TERMINAL_STATES.has(transfer.state)) continue;
-      this.setTransferState(transfer, 'cancelled');
+      this.setTransferState(transfer, "cancelled");
       cancelled.push({
         transfer,
         from_user_id: transfer.from_user_id,
@@ -491,7 +536,7 @@ export class Store extends EventEmitter {
     if (this.sweeper) return;
     this.sweeper = setInterval(() => this.sweep(), config.sweepIntervalMs);
     // Don't keep the process alive solely for the sweeper.
-    if (typeof this.sweeper.unref === 'function') this.sweeper.unref();
+    if (typeof this.sweeper.unref === "function") this.sweeper.unref();
   }
 
   stopSweeper(): void {
@@ -506,7 +551,7 @@ export class Store extends EventEmitter {
     for (const session of [...this.sessions.values()]) {
       // Idle session expiry.
       if (now - session.last_activity > config.sessionIdleMs) {
-        this.endSession(session.slug, 'idle_timeout');
+        this.endSession(session.slug, "idle_timeout");
         continue;
       }
       // Owner-disconnect grace expiry.
@@ -514,7 +559,7 @@ export class Store extends EventEmitter {
         session.owner_disconnected_at !== null &&
         now - session.owner_disconnected_at > config.ownerGraceMs
       ) {
-        this.endSession(session.slug, 'owner_left');
+        this.endSession(session.slug, "owner_left");
         continue;
       }
       // Ownership-offer TTL.
@@ -524,7 +569,11 @@ export class Store extends EventEmitter {
       ) {
         const { to_user_id, from_user_id } = session.pending_owner_offer;
         session.pending_owner_offer = null;
-        this.emit('owner_offer:expired', { slug: session.slug, to_user_id, from_user_id });
+        this.emit("owner_offer:expired", {
+          slug: session.slug,
+          to_user_id,
+          from_user_id,
+        });
       }
       // Invite TTL — drop expired single-use codes.
       this.pruneInvites(session, now);
@@ -533,7 +582,7 @@ export class Store extends EventEmitter {
         if (now - knocker.created_at > config.knockTtlMs) {
           const socket_id = knocker.socket_id;
           this.removeKnocker(session, knocker.knock_id);
-          this.emit('knock:expired', {
+          this.emit("knock:expired", {
             slug: session.slug,
             knock_id: knocker.knock_id,
             socket_id,
@@ -549,9 +598,12 @@ export class Store extends EventEmitter {
           continue;
         }
         const timeout = config.transferTimeouts[transfer.state];
-        if (timeout !== undefined && now - transfer.state_changed_at > timeout) {
-          this.setTransferState(transfer, 'expired');
-          this.emit('transfer:expired', { slug: session.slug, transfer });
+        if (
+          timeout !== undefined &&
+          now - transfer.state_changed_at > timeout
+        ) {
+          this.setTransferState(transfer, "expired");
+          this.emit("transfer:expired", { slug: session.slug, transfer });
         }
       }
     }
@@ -559,13 +611,16 @@ export class Store extends EventEmitter {
 
   // ---- typed event helpers ----------------------------------------------
 
-  override emit<K extends keyof StoreEvents>(event: K, payload: StoreEvents[K]): boolean {
+  override emit<K extends keyof StoreEvents>(
+    event: K,
+    payload: StoreEvents[K]
+  ): boolean {
     return super.emit(event, payload);
   }
 
   override on<K extends keyof StoreEvents>(
     event: K,
-    listener: (payload: StoreEvents[K]) => void,
+    listener: (payload: StoreEvents[K]) => void
   ): this {
     return super.on(event, listener);
   }

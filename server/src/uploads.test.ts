@@ -1,17 +1,17 @@
-import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
-import http from 'node:http';
-import express from 'express';
-import cookieParser from 'cookie-parser';
-import request from 'supertest';
-import { router } from './routes.js';
-import { store } from './sessions.js';
-import { cookieName } from './auth.js';
-import { config } from './config.js';
+import { describe, it, expect, beforeEach, beforeAll, afterAll } from "vitest";
+import http from "node:http";
+import express from "express";
+import cookieParser from "cookie-parser";
+import request from "supertest";
+import { router } from "./routes.js";
+import { store } from "./sessions.js";
+import { cookieName } from "./auth.js";
+import { config } from "./config.js";
 
 const app = express();
 app.use(cookieParser());
 app.use(express.json());
-app.use('/api', router);
+app.use("/api", router);
 
 let server: http.Server;
 let port: number;
@@ -44,179 +44,189 @@ function cookieHeader(slug: string, token: string): string {
   return `${cookieName(slug)}=${token}`;
 }
 
-describe('POST /api/sessions', () => {
-  it('creates a session with the owner name, returns ids, and sets a member cookie', async () => {
-    const res = await request(server).post('/api/sessions').send({ display_name: 'Captain' });
+describe("POST /api/sessions", () => {
+  it("creates a session with the owner name, returns ids, and sets a member cookie", async () => {
+    const res = await request(server)
+      .post("/api/sessions")
+      .send({ display_name: "Captain" });
     expect(res.status).toBe(201);
-    expect(typeof res.body.slug).toBe('string');
-    expect(typeof res.body.owner_user_id).toBe('string');
+    expect(typeof res.body.slug).toBe("string");
+    expect(typeof res.body.owner_user_id).toBe("string");
     const session = store.getSession(res.body.slug)!;
-    expect(session.members.get(res.body.owner_user_id)?.display_name).toBe('Captain');
-    const setCookie = res.headers['set-cookie'] as unknown as string[] | undefined;
-    expect(setCookie?.some((c) => c.startsWith(`${cookieName(res.body.slug)}=`))).toBe(true);
+    expect(session.members.get(res.body.owner_user_id)?.display_name).toBe(
+      "Captain"
+    );
+    const setCookie = res.headers["set-cookie"] as unknown as
+      | string[]
+      | undefined;
+    expect(
+      setCookie?.some((c) => c.startsWith(`${cookieName(res.body.slug)}=`))
+    ).toBe(true);
   });
 
-  it('400 when the owner name is missing or invalid', async () => {
-    const res = await request(server).post('/api/sessions').send({});
+  it("400 when the owner name is missing or invalid", async () => {
+    const res = await request(server).post("/api/sessions").send({});
     expect(res.status).toBe(400);
-    const bidi = await request(server).post('/api/sessions').send({ display_name: 'x\u202Ey' });
+    const bidi = await request(server)
+      .post("/api/sessions")
+      .send({ display_name: "x\u202Ey" });
     expect(bidi.status).toBe(400);
   });
 });
 
-describe('POST /api/sessions/:slug/files', () => {
-  it('accepts a small upload, canonicalises the name, accounts the bytes', async () => {
+describe("POST /api/sessions/:slug/files", () => {
+  it("accepts a small upload, canonicalises the name, accounts the bytes", async () => {
     const { slug, token, session } = newOwnerSession();
     const res = await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, token))
-      .attach('file', Buffer.from('hello world'), 'My Doc.TXT');
+      .set("Cookie", cookieHeader(slug, token))
+      .attach("file", Buffer.from("hello world"), "My Doc.TXT");
     expect(res.status).toBe(201);
-    expect(res.body.name).toBe('my-doc.txt');
+    expect(res.body.name).toBe("my-doc.txt");
     expect(res.body.size).toBe(11);
     expect(session.bucket.size).toBe(1);
     expect(session.total_bytes).toBe(11);
   });
 
-  it('accounts the real file size, not the (larger) multipart Content-Length', async () => {
+  it("accounts the real file size, not the (larger) multipart Content-Length", async () => {
     // The multipart request body (boundaries + headers) is larger than the file
     // itself, so the reservation is reconciled down to the stored bytes. This
     // guards the byte-accounting path against over- or under-charging.
     const { slug, token, session } = newOwnerSession();
     const res = await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, token))
-      .attach('file', Buffer.alloc(4096, 7), 'blob.bin');
+      .set("Cookie", cookieHeader(slug, token))
+      .attach("file", Buffer.alloc(4096, 7), "blob.bin");
     expect(res.status).toBe(201);
     expect(res.body.size).toBe(4096);
     expect(session.total_bytes).toBe(4096);
     expect(store.totalBytesGlobal).toBe(4096);
   });
 
-  it('401 without a cookie', async () => {
+  it("401 without a cookie", async () => {
     const { slug } = newOwnerSession();
     const res = await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .attach('file', Buffer.from('x'), 'a.txt');
+      .attach("file", Buffer.from("x"), "a.txt");
     expect(res.status).toBe(401);
   });
 
-  it('507 when the reservation would exceed the per-session cap', async () => {
+  it("507 when the reservation would exceed the per-session cap", async () => {
     const { slug, token, session } = newOwnerSession();
     // Pre-fill close to the cap so a small upload cannot be reserved.
     store.reserveBytes(session, config.maxSessionBytes - 4);
     const before = session.total_bytes;
     const res = await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, token))
-      .attach('file', Buffer.from('way bigger than four bytes'), 'big.txt');
+      .set("Cookie", cookieHeader(slug, token))
+      .attach("file", Buffer.from("way bigger than four bytes"), "big.txt");
     expect(res.status).toBe(507);
     // Failed reservation must not leak bytes.
     expect(session.total_bytes).toBe(before);
   });
 
-  it('411 when Content-Length is absent (chunked upload)', async () => {
+  it("411 when Content-Length is absent (chunked upload)", async () => {
     const { slug, token } = newOwnerSession();
     const status = await new Promise<number>((resolve, reject) => {
       const req = http.request(
         {
-          host: '127.0.0.1',
+          host: "127.0.0.1",
           port,
           path: `/api/sessions/${slug}/files`,
-          method: 'POST',
+          method: "POST",
           headers: {
             Cookie: cookieHeader(slug, token),
-            'Content-Type': 'application/octet-stream',
-            'Transfer-Encoding': 'chunked', // forces no Content-Length
+            "Content-Type": "application/octet-stream",
+            "Transfer-Encoding": "chunked", // forces no Content-Length
           },
         },
         (res) => {
           res.resume();
           resolve(res.statusCode ?? 0);
-        },
+        }
       );
-      req.on('error', reject);
-      req.write('some-bytes');
+      req.on("error", reject);
+      req.write("some-bytes");
       req.end();
     });
     expect(status).toBe(411);
   });
 });
 
-describe('DELETE /api/sessions/:slug/files/:id', () => {
-  it('uploader can delete and the bytes are released', async () => {
+describe("DELETE /api/sessions/:slug/files/:id", () => {
+  it("uploader can delete and the bytes are released", async () => {
     const { slug, token, session } = newOwnerSession();
     const up = await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, token))
-      .attach('file', Buffer.from('1234567890'), 'a.txt');
+      .set("Cookie", cookieHeader(slug, token))
+      .attach("file", Buffer.from("1234567890"), "a.txt");
     expect(session.total_bytes).toBe(10);
     const id = up.body.id;
     const del = await request(server)
       .delete(`/api/sessions/${slug}/files/${id}`)
-      .set('Cookie', cookieHeader(slug, token));
+      .set("Cookie", cookieHeader(slug, token));
     expect(del.status).toBe(204);
     expect(session.bucket.size).toBe(0);
     expect(session.total_bytes).toBe(0);
   });
 
-  it('403 when a non-uploader non-owner tries to delete', async () => {
+  it("403 when a non-uploader non-owner tries to delete", async () => {
     const { slug, token, session } = newOwnerSession();
     const up = await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, token))
-      .attach('file', Buffer.from('abc'), 'a.txt');
+      .set("Cookie", cookieHeader(slug, token))
+      .attach("file", Buffer.from("abc"), "a.txt");
     const other = store.admitKnocker(
       session,
-      store.addKnocker(session, 'Other').knocker.knock_id,
+      store.addKnocker(session, "Other").knocker.knock_id
     )!;
     const del = await request(server)
       .delete(`/api/sessions/${slug}/files/${up.body.id}`)
-      .set('Cookie', cookieHeader(slug, other.session_token));
+      .set("Cookie", cookieHeader(slug, other.session_token));
     expect(del.status).toBe(403);
     expect(session.bucket.size).toBe(1);
   });
 
-  it('the owner can delete a file uploaded by another member', async () => {
+  it("the owner can delete a file uploaded by another member", async () => {
     const { slug, token, session } = newOwnerSession();
     const other = store.admitKnocker(
       session,
-      store.addKnocker(session, 'Other').knocker.knock_id,
+      store.addKnocker(session, "Other").knocker.knock_id
     )!;
     const up = await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, other.session_token))
-      .attach('file', Buffer.from('owned by other'), 'o.txt');
+      .set("Cookie", cookieHeader(slug, other.session_token))
+      .attach("file", Buffer.from("owned by other"), "o.txt");
     expect(session.bucket.size).toBe(1);
     const del = await request(server)
       .delete(`/api/sessions/${slug}/files/${up.body.id}`)
-      .set('Cookie', cookieHeader(slug, token));
+      .set("Cookie", cookieHeader(slug, token));
     expect(del.status).toBe(204);
     expect(session.bucket.size).toBe(0);
     expect(session.total_bytes).toBe(0);
   });
 });
 
-describe('owner bulk file deletion', () => {
-  it('DELETE /orphaned-files removes files whose uploader has left', async () => {
+describe("owner bulk file deletion", () => {
+  it("DELETE /orphaned-files removes files whose uploader has left", async () => {
     const { slug, token, session } = newOwnerSession();
     const other = store.admitKnocker(
       session,
-      store.addKnocker(session, 'Other').knocker.knock_id,
+      store.addKnocker(session, "Other").knocker.knock_id
     )!;
     // Owner keeps a file; the other member uploads two, then leaves (kept).
     await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, token))
-      .attach('file', Buffer.from('owner file'), 'owner.txt');
+      .set("Cookie", cookieHeader(slug, token))
+      .attach("file", Buffer.from("owner file"), "owner.txt");
     await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, other.session_token))
-      .attach('file', Buffer.from('orphan one'), 'one.txt');
+      .set("Cookie", cookieHeader(slug, other.session_token))
+      .attach("file", Buffer.from("orphan one"), "one.txt");
     await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, other.session_token))
-      .attach('file', Buffer.from('orphan two'), 'two.txt');
+      .set("Cookie", cookieHeader(slug, other.session_token))
+      .attach("file", Buffer.from("orphan two"), "two.txt");
     expect(session.bucket.size).toBe(3);
     // The member leaves without purging files.
     store.removeMember(session, other.user_id, false);
@@ -224,102 +234,104 @@ describe('owner bulk file deletion', () => {
 
     const del = await request(server)
       .delete(`/api/sessions/${slug}/orphaned-files`)
-      .set('Cookie', cookieHeader(slug, token));
+      .set("Cookie", cookieHeader(slug, token));
     expect(del.status).toBe(200);
     expect(del.body.removed).toBe(2);
     expect(session.bucket.size).toBe(1);
   });
 
-  it('DELETE /members/:userId/files removes one member\u2019s uploads', async () => {
+  it("DELETE /members/:userId/files removes one member\u2019s uploads", async () => {
     const { slug, token, session } = newOwnerSession();
     const other = store.admitKnocker(
       session,
-      store.addKnocker(session, 'Other').knocker.knock_id,
+      store.addKnocker(session, "Other").knocker.knock_id
     )!;
     await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, other.session_token))
-      .attach('file', Buffer.from('member file'), 'm.txt');
+      .set("Cookie", cookieHeader(slug, other.session_token))
+      .attach("file", Buffer.from("member file"), "m.txt");
     await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, token))
-      .attach('file', Buffer.from('owner file'), 'o.txt');
+      .set("Cookie", cookieHeader(slug, token))
+      .attach("file", Buffer.from("owner file"), "o.txt");
     expect(session.bucket.size).toBe(2);
 
     const del = await request(server)
       .delete(`/api/sessions/${slug}/members/${other.user_id}/files`)
-      .set('Cookie', cookieHeader(slug, token));
+      .set("Cookie", cookieHeader(slug, token));
     expect(del.status).toBe(200);
     expect(del.body.removed).toBe(1);
     expect(session.bucket.size).toBe(1);
   });
 
-  it('403 when a non-owner calls a bulk delete route', async () => {
+  it("403 when a non-owner calls a bulk delete route", async () => {
     const { slug, session } = newOwnerSession();
     const other = store.admitKnocker(
       session,
-      store.addKnocker(session, 'Other').knocker.knock_id,
+      store.addKnocker(session, "Other").knocker.knock_id
     )!;
     const del = await request(server)
       .delete(`/api/sessions/${slug}/orphaned-files`)
-      .set('Cookie', cookieHeader(slug, other.session_token));
+      .set("Cookie", cookieHeader(slug, other.session_token));
     expect(del.status).toBe(403);
   });
 });
 
-describe('GET /api/sessions/:slug/files/:id', () => {
-  it('streams with a canonical Content-Disposition filename', async () => {
+describe("GET /api/sessions/:slug/files/:id", () => {
+  it("streams with a canonical Content-Disposition filename", async () => {
     const { slug, token } = newOwnerSession();
     const up = await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, token))
-      .attach('file', Buffer.from('payload'), 'Weird Name!.BIN');
+      .set("Cookie", cookieHeader(slug, token))
+      .attach("file", Buffer.from("payload"), "Weird Name!.BIN");
     const res = await request(server)
       .get(`/api/sessions/${slug}/files/${up.body.id}`)
-      .set('Cookie', cookieHeader(slug, token));
+      .set("Cookie", cookieHeader(slug, token));
     expect(res.status).toBe(200);
-    expect(res.headers['content-disposition']).toBe('attachment; filename="weird-name.bin"');
+    expect(res.headers["content-disposition"]).toBe(
+      'attachment; filename="weird-name.bin"'
+    );
   });
 });
 
-describe('POST /api/sessions/:slug/knock', () => {
-  it('rejects an invalid display name (bidi override) with 400', async () => {
+describe("POST /api/sessions/:slug/knock", () => {
+  it("rejects an invalid display name (bidi override) with 400", async () => {
     const { slug } = newOwnerSession();
     const res = await request(server)
       .post(`/api/sessions/${slug}/knock`)
-      .send({ display_name: 'Alice\u202EEvil' });
+      .send({ display_name: "Alice\u202EEvil" });
     expect(res.status).toBe(400);
   });
 
-  it('423 when knocking is paused', async () => {
+  it("423 when knocking is paused", async () => {
     const { slug, session } = newOwnerSession();
     session.knocking_paused = true;
     const res = await request(server)
       .post(`/api/sessions/${slug}/knock`)
-      .send({ display_name: 'Alice' });
+      .send({ display_name: "Alice" });
     expect(res.status).toBe(423);
   });
 
-  it('423 session_frozen when the session is frozen', async () => {
+  it("423 session_frozen when the session is frozen", async () => {
     const { slug, session } = newOwnerSession();
     session.frozen = true;
     const res = await request(server)
       .post(`/api/sessions/${slug}/knock`)
-      .send({ display_name: 'Alice' });
+      .send({ display_name: "Alice" });
     expect(res.status).toBe(423);
-    expect(res.body.error).toBe('session_frozen');
+    expect(res.body.error).toBe("session_frozen");
   });
 });
 
-describe('frozen session blocks data routes (423 session_frozen)', () => {
-  it('rejects upload, download, and delete while frozen', async () => {
+describe("frozen session blocks data routes (423 session_frozen)", () => {
+  it("rejects upload, download, and delete while frozen", async () => {
     const { slug, token, session } = newOwnerSession();
 
     // Upload one file before freezing so we have something to fetch/delete.
     const uploaded = await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, token))
-      .attach('file', Buffer.from('hello'), 'a.txt');
+      .set("Cookie", cookieHeader(slug, token))
+      .attach("file", Buffer.from("hello"), "a.txt");
     expect(uploaded.status).toBe(201);
     const fileId = uploaded.body.id as string;
 
@@ -327,27 +339,27 @@ describe('frozen session blocks data routes (423 session_frozen)', () => {
 
     const upload = await request(server)
       .post(`/api/sessions/${slug}/files`)
-      .set('Cookie', cookieHeader(slug, token))
-      .attach('file', Buffer.from('nope'), 'b.txt');
+      .set("Cookie", cookieHeader(slug, token))
+      .attach("file", Buffer.from("nope"), "b.txt");
     expect(upload.status).toBe(423);
-    expect(upload.body.error).toBe('session_frozen');
+    expect(upload.body.error).toBe("session_frozen");
 
     const download = await request(server)
       .get(`/api/sessions/${slug}/files/${fileId}`)
-      .set('Cookie', cookieHeader(slug, token));
+      .set("Cookie", cookieHeader(slug, token));
     expect(download.status).toBe(423);
-    expect(download.body.error).toBe('session_frozen');
+    expect(download.body.error).toBe("session_frozen");
 
     const del = await request(server)
       .delete(`/api/sessions/${slug}/files/${fileId}`)
-      .set('Cookie', cookieHeader(slug, token));
+      .set("Cookie", cookieHeader(slug, token));
     expect(del.status).toBe(423);
-    expect(del.body.error).toBe('session_frozen');
+    expect(del.body.error).toBe("session_frozen");
 
     const orphaned = await request(server)
       .delete(`/api/sessions/${slug}/orphaned-files`)
-      .set('Cookie', cookieHeader(slug, token));
+      .set("Cookie", cookieHeader(slug, token));
     expect(orphaned.status).toBe(423);
-    expect(orphaned.body.error).toBe('session_frozen');
+    expect(orphaned.body.error).toBe("session_frozen");
   });
 });

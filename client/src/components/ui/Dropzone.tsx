@@ -1,6 +1,6 @@
-import { useRef, useState, type ReactNode } from 'react';
-import { cx } from '../../lib/cx';
-import './Dropzone.scss';
+import { useRef, useState, type ReactNode } from "react";
+import { cx } from "../../lib/cx";
+import "./Dropzone.scss";
 
 interface DropzoneProps {
   onFiles: (files: File[]) => void;
@@ -9,7 +9,12 @@ interface DropzoneProps {
   children?: ReactNode;
 }
 
-export function Dropzone({ onFiles, multiple = true, disabled = false, children }: DropzoneProps) {
+export function Dropzone({
+  onFiles,
+  multiple = true,
+  disabled = false,
+  children,
+}: DropzoneProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [active, setActive] = useState(false);
 
@@ -20,12 +25,16 @@ export function Dropzone({ onFiles, multiple = true, disabled = false, children 
 
   return (
     <div
-      className={cx('dropzone', active && 'dropzone_active', disabled && 'dropzone_disabled')}
+      className={cx(
+        "dropzone",
+        active && "dropzone_active",
+        disabled && "dropzone_disabled"
+      )}
       role="button"
       tabIndex={disabled ? -1 : 0}
       onClick={() => !disabled && inputRef.current?.click()}
       onKeyDown={(e) => {
-        if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+        if (!disabled && (e.key === "Enter" || e.key === " ")) {
           e.preventDefault();
           inputRef.current?.click();
         }
@@ -49,7 +58,7 @@ export function Dropzone({ onFiles, multiple = true, disabled = false, children 
         disabled={disabled}
         onChange={(e) => {
           pick(e.target.files);
-          e.target.value = '';
+          e.target.value = "";
         }}
       />
       {children}

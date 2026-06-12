@@ -1,9 +1,9 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { RiCloseLine } from 'react-icons/ri';
-import { cx } from '../../lib/cx';
-import { useExitAnimation } from '../../lib/use_exit_animation';
-import './Modal.scss';
+import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { RiCloseLine } from "react-icons/ri";
+import { cx } from "../../lib/cx";
+import { useExitAnimation } from "../../lib/use_exit_animation";
+import "./Modal.scss";
 
 interface ModalProps {
   open: boolean;
@@ -39,13 +39,15 @@ export function Modal({
     if (!open) return;
     lastFocused.current = document.activeElement as HTMLElement | null;
     const card = cardRef.current;
-    card?.querySelector<HTMLElement>('button, [href], input, select, textarea')?.focus();
+    card
+      ?.querySelector<HTMLElement>("button, [href], input, select, textarea")
+      ?.focus();
 
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !locked) onClose();
-      if (e.key === 'Tab' && card) {
+      if (e.key === "Escape" && !locked) onClose();
+      if (e.key === "Tab" && card) {
         const focusables = card.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         );
         if (focusables.length === 0) return;
         const first = focusables[0];
@@ -59,9 +61,9 @@ export function Modal({
         }
       }
     }
-    document.addEventListener('keydown', onKey);
+    document.addEventListener("keydown", onKey);
     return () => {
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener("keydown", onKey);
       lastFocused.current?.focus?.();
     };
   }, [open, locked, onClose]);
@@ -70,7 +72,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className={cx('modal_backdrop', exiting && 'modal_backdrop_exiting')}
+      className={cx("modal_backdrop", exiting && "modal_backdrop_exiting")}
       ref={ref}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !locked) onClose();
@@ -78,10 +80,10 @@ export function Modal({
     >
       <div
         className={cx(
-          'modal_card',
-          locked && 'modal_card_locked',
-          exiting && 'modal_card_exiting',
-          className,
+          "modal_card",
+          locked && "modal_card_locked",
+          exiting && "modal_card_exiting",
+          className
         )}
         role="dialog"
         aria-modal="true"
@@ -92,7 +94,9 @@ export function Modal({
         {(title || (showClose && !locked)) && (
           <div className="modal_head">
             {title ? (
-              <h2 className="modal_title" id={titleId}>{title}</h2>
+              <h2 className="modal_title" id={titleId}>
+                {title}
+              </h2>
             ) : (
               <span />
             )}
@@ -108,14 +112,18 @@ export function Modal({
             )}
           </div>
         )}
-        <div className="modal_body" id={bodyId}>{children}</div>
+        <div className="modal_body" id={bodyId}>
+          {children}
+        </div>
         {footer && (
-          <div className={cx('modal_footer', stackFooter && 'modal_footer_stack')}>
+          <div
+            className={cx("modal_footer", stackFooter && "modal_footer_stack")}
+          >
             {footer}
           </div>
         )}
       </div>
     </div>,
-    document.body,
+    document.body
   );
 }

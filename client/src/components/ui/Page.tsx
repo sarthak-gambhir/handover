@@ -14,7 +14,13 @@ interface PageProps {
   children: ReactNode;
 }
 
-export function Page({ bar, wide = false, hideAppBar = false, className, children }: PageProps) {
+export function Page({
+  bar,
+  wide = false,
+  hideAppBar = false,
+  className,
+  children,
+}: PageProps) {
   return (
     <div className="page">
       {!hideAppBar && <AppBar>{bar}</AppBar>}
@@ -22,7 +28,9 @@ export function Page({ bar, wide = false, hideAppBar = false, className, childre
         {children}
       </main>
       <footer className="page_footer">
-        <span>In-memory transfer. Nothing is stored after the session ends.</span>
+        <span>
+          In-memory transfer. Nothing is stored after the session ends.
+        </span>
       </footer>
     </div>
   );

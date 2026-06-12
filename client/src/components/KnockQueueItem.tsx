@@ -29,7 +29,7 @@ export function KnockQueueItem({
     <li
       className={cx(
         "knock_queue_item",
-        selected && "knock_queue_item_selected",
+        selected && "knock_queue_item_selected"
       )}
     >
       {selectable && (

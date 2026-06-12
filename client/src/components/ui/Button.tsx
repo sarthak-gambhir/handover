@@ -30,13 +30,16 @@ export function Button({
         `button_${variant}`,
         `button_${size}`,
         loading && "button_loading",
-        className,
+        className
       )}
       disabled={disabled || loading}
       {...rest}
     >
       {loading ? (
-        <RiLoader4Line className="button_spinner" size={size === "sm" ? 16 : 18} />
+        <RiLoader4Line
+          className="button_spinner"
+          size={size === "sm" ? 16 : 18}
+        />
       ) : (
         icon && <span className="button_icon">{icon}</span>
       )}

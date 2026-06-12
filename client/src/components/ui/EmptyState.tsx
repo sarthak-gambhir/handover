@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import './EmptyState.scss';
+import type { ReactNode } from "react";
+import "./EmptyState.scss";
 
 export function EmptyState({
   icon,
