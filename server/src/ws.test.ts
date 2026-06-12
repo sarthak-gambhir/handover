@@ -511,6 +511,75 @@ describe("owner disconnect grace countdown", () => {
   }, 12000);
 });
 
+describe("E2EE key exchange relay", () => {
+  beforeEach(() => {
+    store.sessions.clear();
+    store.tokens.clear();
+  });
+
+  it("publishes the pubkey from identify into member projections", async () => {
+    const { session, ownerToken } = store.createSession();
+    const slug = session.slug;
+    const oSock = connect(slug, ownerToken);
+    const snapO = once(oSock, "state:snapshot");
+    oSock.emit("identify", { slug, tab_id: "tab-o", pubkey: "PUB_OWNER" });
+    await snapO;
+
+    const a = store.admitKnocker(
+      session,
+      store.addKnocker(session, "A").knocker.knock_id
+    )!;
+    const aSock = connect(slug, a.session_token);
+    const snapA = once<{
+      members: Array<{ is_owner: boolean; pubkey?: string }>;
+    }>(aSock, "state:snapshot");
+    aSock.emit("identify", { slug, tab_id: "tab-a", pubkey: "PUB_A" });
+    const got = await snapA;
+    const owner = got.members.find((m) => m.is_owner);
+    expect(owner?.pubkey).toBe("PUB_OWNER");
+  });
+
+  it("relays request_key to other members (with from_user_id + pubkey)", async () => {
+    const s = await setup();
+    const oGot = once<{ from_user_id: string; pubkey: string }>(
+      s.O.sock,
+      "e2ee:request_key"
+    );
+    s.A.sock.emit("e2ee:request_key", { pubkey: "PUB_A" });
+    const got = await oGot;
+    expect(got.from_user_id).toBe(s.A.id);
+    expect(got.pubkey).toBe("PUB_A");
+  });
+
+  it("routes deliver_key only to the targeted member", async () => {
+    const s = await setup();
+    let bReceived = false;
+    s.B.sock.on("e2ee:key", () => {
+      bReceived = true;
+    });
+    const aKey = once<{
+      from_user_id: string;
+      from_pubkey: string;
+      wrapped: string;
+      iv: string;
+    }>(s.A.sock, "e2ee:key");
+    s.O.sock.emit("e2ee:deliver_key", {
+      to_user_id: s.A.id,
+      from_pubkey: "PUB_OWNER",
+      wrapped: "WRAPPED",
+      iv: "IV",
+    });
+    const got = await aKey;
+    expect(got.from_user_id).toBe(s.O.id);
+    expect(got.from_pubkey).toBe("PUB_OWNER");
+    expect(got.wrapped).toBe("WRAPPED");
+    expect(got.iv).toBe("IV");
+    // The non-targeted member must not receive the wrapped key.
+    await new Promise((r) => setTimeout(r, 100));
+    expect(bReceived).toBe(false);
+  });
+});
+
 describe("one tab per session", () => {
   beforeEach(() => {
     store.sessions.clear();

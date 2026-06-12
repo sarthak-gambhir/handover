@@ -179,9 +179,12 @@ export function registerWs(io: Server): void {
   });
 
   io.on("connection", (socket: AppSocket) => {
-    socket.on("identify", (payload: { slug?: string; tab_id?: string }) => {
-      handleIdentify(io, socket, payload);
-    });
+    socket.on(
+      "identify",
+      (payload: { slug?: string; tab_id?: string; pubkey?: string }) => {
+        handleIdentify(io, socket, payload);
+      }
+    );
 
     // ---- owner-only events ----
     socket.on("admit", (p: { knock_id?: string }) =>
@@ -234,6 +237,20 @@ export function registerWs(io: Server): void {
       handleTransferComplete(io, socket, p)
     );
 
+    // ---- E2EE key exchange (relay only) ----
+    socket.on("e2ee:request_key", (p: { pubkey?: string }) =>
+      handleE2eeRequestKey(socket, p)
+    );
+    socket.on(
+      "e2ee:deliver_key",
+      (p: {
+        to_user_id?: string;
+        from_pubkey?: string;
+        wrapped?: string;
+        iv?: string;
+      }) => handleE2eeDeliverKey(io, socket, p)
+    );
+
     socket.on("leave", (ack?: () => void) => handleLeave(io, socket, ack));
     socket.on("disconnect", () => handleDisconnect(io, socket));
   });
@@ -254,7 +271,7 @@ function resolveCookieToken(
 function handleIdentify(
   io: Server,
   socket: AppSocket,
-  payload: { slug?: string; tab_id?: string }
+  payload: { slug?: string; tab_id?: string; pubkey?: string }
 ): void {
   const slug = normalizeSlug(payload.slug ?? "");
   const tab_id = payload.tab_id;
@@ -330,6 +347,11 @@ function handleIdentify(
   member.socket_id = socket.id;
   member.tab_id = tab_id;
   member.last_seen = Date.now();
+  // Record the member's published ECDH public key so peers can wrap the bucket
+  // content key for them. Bounded to avoid unbounded memory from a bad client.
+  if (typeof payload.pubkey === "string" && payload.pubkey.length <= 4096) {
+    member.pubkey = payload.pubkey;
+  }
   if (member.is_owner) {
     session.owner_disconnected_at = null;
     // Cancel the pending teardown — the owner is back. Clients clear their
@@ -366,6 +388,72 @@ function handleIdentify(
   });
   io.to(room(slug)).emit("member:online", { user_id: member.user_id });
   broadcastMembers(io, session);
+}
+
+// ---- E2EE key exchange (relay only) ----------------------------------------
+
+const MAX_PUBKEY_BYTES = 4096;
+const MAX_WRAPPED_BYTES = 4096;
+
+function getMemberContext(
+  socket: AppSocket
+): { session: Session; member: Member } | null {
+  const data = socket.data;
+  if (!data || data.role !== "member" || !data.user_id) return null;
+  const session = store.getSession(data.slug);
+  if (!session) return null;
+  const member = session.members.get(data.user_id);
+  if (!member) return null;
+  return { session, member };
+}
+
+// A joining member asks the room for the bucket content key. We relay the
+// request (with their public key) to everyone else; any current key-holder
+// answers via e2ee:deliver_key. The server never sees the symmetric key.
+function handleE2eeRequestKey(socket: AppSocket, p: { pubkey?: string }): void {
+  const ctx = getMemberContext(socket);
+  if (!ctx) return;
+  if (typeof p.pubkey !== "string" || p.pubkey.length > MAX_PUBKEY_BYTES)
+    return;
+  ctx.member.pubkey = p.pubkey;
+  socket.to(room(ctx.session.slug)).emit("e2ee:request_key", {
+    from_user_id: ctx.member.user_id,
+    pubkey: p.pubkey,
+  });
+}
+
+// A key-holder hands the (already wrapped-for-recipient) content key back to a
+// specific member. We only route the opaque blob to the target's socket.
+function handleE2eeDeliverKey(
+  io: Server,
+  socket: AppSocket,
+  p: {
+    to_user_id?: string;
+    from_pubkey?: string;
+    wrapped?: string;
+    iv?: string;
+  }
+): void {
+  const ctx = getMemberContext(socket);
+  if (!ctx) return;
+  if (
+    !p.to_user_id ||
+    typeof p.from_pubkey !== "string" ||
+    typeof p.wrapped !== "string" ||
+    typeof p.iv !== "string" ||
+    p.from_pubkey.length > MAX_PUBKEY_BYTES ||
+    p.wrapped.length > MAX_WRAPPED_BYTES ||
+    p.iv.length > 256
+  )
+    return;
+  const target = ctx.session.members.get(p.to_user_id);
+  if (!target || !target.socket_id) return;
+  io.to(target.socket_id).emit("e2ee:key", {
+    from_user_id: ctx.member.user_id,
+    from_pubkey: p.from_pubkey,
+    wrapped: p.wrapped,
+    iv: p.iv,
+  });
 }
 
 // ---- owner: admit / reject -------------------------------------------------

@@ -10,6 +10,7 @@ import {
   RiGhostLine,
   RiP2pLine,
   RiShieldCheckLine,
+  RiLockLine,
 } from "react-icons/ri";
 import { Page } from "../components/ui/Page";
 import { BrandMark } from "../components/ui/BrandMark";
@@ -19,6 +20,7 @@ import { Input } from "../components/ui/Input";
 import { Tabs } from "../components/ui/Tabs";
 import { useToast } from "../components/ui/Toast";
 import { api, ApiError } from "../lib/api";
+import { e2eeSupported } from "../lib/e2ee";
 import { sessionStore } from "../lib/sessionStore";
 import { normalizeSlug, sessionPath, waitingPath } from "../lib/slug";
 import "./Home.scss";
@@ -267,6 +269,11 @@ export function Home() {
           <li>
             <RiP2pLine size={20} /> Peer-to-peer
           </li>
+          {e2eeSupported && (
+            <li>
+              <RiLockLine size={20} /> End-to-end encrypted
+            </li>
+          )}
           <li>
             <RiGhostLine size={20} /> Nothing stored
           </li>

@@ -94,11 +94,6 @@
   }
 }
 
-.horizontal_divider {
-  border-color: var(--border);
-  margin-bottom: var(--space_4);
-}
-
 .home_form {
   display: flex;
   flex-direction: column;
@@ -165,19 +160,13 @@
 }
 
 .home_trust {
-  // Two-column grid on small screens; a centered single row once there's room.
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--space_2) var(--space_6);
   list-style: none;
   padding: 0;
   margin: 0;
-
-  @include m.sm_up {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-  }
 
   li {
     display: inline-flex;

@@ -5,6 +5,9 @@ export interface PublicMember {
   display_name: string;
   is_owner: boolean;
   online: boolean;
+  // Base64 SPKI of the member's ECDH public key, used to wrap the bucket
+  // content key for them. Absent until the member's socket has identified.
+  pubkey?: string;
 }
 
 export interface PublicBucketEntry {

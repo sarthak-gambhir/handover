@@ -16,6 +16,11 @@ export type Member = {
   joined_at: number;
   last_seen: number;
   offline_grace_timer?: ReturnType<typeof setTimeout> | null;
+  // Base64 SPKI of the member's ECDH public key, published on identify. Used by
+  // other clients to wrap the bucket content key for this member. The server
+  // only relays it; it never holds the symmetric content key. Null until the
+  // member's socket has identified.
+  pubkey?: string | null;
 };
 
 export type Invite = {
@@ -92,6 +97,7 @@ export type PublicMember = {
   display_name: string;
   is_owner: boolean;
   online: boolean;
+  pubkey?: string | null;
 };
 
 export type PublicBucketEntry = {

@@ -18,6 +18,7 @@ import {
 } from "./transfer_types";
 import { useBucketUploads } from "./use_bucket_uploads";
 import { randomId } from "./id";
+import * as e2ee from "./e2ee";
 
 type Conn = SenderConnection | ReceiverConnection;
 
@@ -53,8 +54,16 @@ export function useSession(slug: string) {
     null
   );
   const [justAdded, setJustAdded] = useState<Set<string>>(new Set());
+  // E2EE: the shared bucket content key is encrypted in the browser. `keyReady`
+  // gates uploads/downloads until this client holds the key. When SubtleCrypto
+  // is unavailable (plain HTTP / insecure context) we can't encrypt, so we
+  // treat the bucket as ready and fall back to plaintext.
+  const [keyReady, setKeyReady] = useState(!e2ee.e2eeSupported);
 
   const socketRef = useRef<AppSocket | null>(null);
+  const contentKeyRef = useRef<CryptoKey | null>(null);
+  const keyRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const keyBootstrapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Set when this client intentionally leaves so the resulting server-side
   // teardown (session:ended for an owner, forced disconnect) is not surfaced
   // as a "fatal" screen — the user is already on their way to the home page.
@@ -64,11 +73,23 @@ export function useSession(slug: string) {
   const outgoingQueue = useRef<Array<{ key: string; to_user_id: string }>>([]);
   const rateRef = useRef<Map<string, RateSample>>(new Map());
 
+  // Encrypt each file with the session content key before it is uploaded.
+  // When E2EE is unavailable the raw file is uploaded unchanged.
+  const prepareUpload = useCallback(
+    async (file: File): Promise<Blob | File> => {
+      if (!e2ee.e2eeSupported) return file;
+      const key = contentKeyRef.current;
+      if (!key) throw { code: "key_not_ready" };
+      return e2ee.encryptFile(file, key);
+    },
+    []
+  );
+
   const {
     uploads,
     uploadFiles: rawUploadFiles,
     deleteFile: rawDeleteFile,
-  } = useBucketUploads(slug, yourUserId);
+  } = useBucketUploads(slug, yourUserId, prepareUpload);
 
   const isOwner = yourUserId !== "" && yourUserId === ownerUserId;
 
@@ -80,9 +101,16 @@ export function useSession(slug: string) {
         toast("Session is frozen — uploads are paused.", "warn");
         return;
       }
+      if (!keyReady) {
+        toast(
+          "Encryption key is still syncing — try again in a moment.",
+          "warn"
+        );
+        return;
+      }
       rawUploadFiles(files);
     },
-    [frozen, rawUploadFiles, toast]
+    [frozen, keyReady, rawUploadFiles, toast]
   );
   const deleteFile = useCallback(
     async (id: string) => {
@@ -184,11 +212,126 @@ export function useSession(slug: string) {
     const socket = createSocket();
     socketRef.current = socket;
 
+    // ---- E2EE content-key acquisition ----
+    const clearKeyTimers = () => {
+      if (keyRetryRef.current) {
+        clearInterval(keyRetryRef.current);
+        keyRetryRef.current = null;
+      }
+      if (keyBootstrapRef.current) {
+        clearTimeout(keyBootstrapRef.current);
+        keyBootstrapRef.current = null;
+      }
+    };
+    const markKeyReady = () => {
+      clearKeyTimers();
+      setKeyReady(true);
+    };
+    const requestKey = async () => {
+      try {
+        const pubkey = await e2ee.getPublicKeyB64(slug);
+        socket.emit("e2ee:request_key", { pubkey });
+      } catch {
+        /* ignore */
+      }
+    };
+    const bootstrapOwnerKey = async () => {
+      if (contentKeyRef.current) return;
+      try {
+        contentKeyRef.current = await e2ee.generateContentKey(slug);
+        markKeyReady();
+      } catch {
+        /* ignore */
+      }
+    };
+    // Called after each state:snapshot. Loads/derives the content key and, if
+    // missing, asks the room for it. The owner bootstraps a fresh key if nobody
+    // answers (covers a brand-new session with no other members yet).
+    const ensureContentKey = async (
+      isOwnerNow: boolean,
+      memberCount: number
+    ) => {
+      if (!e2ee.e2eeSupported) return;
+      if (contentKeyRef.current) {
+        markKeyReady();
+        return;
+      }
+      const existing = await e2ee.loadContentKey(slug);
+      if (existing) {
+        contentKeyRef.current = existing;
+        markKeyReady();
+        return;
+      }
+      void requestKey();
+      if (!keyRetryRef.current) {
+        keyRetryRef.current = setInterval(() => {
+          if (!contentKeyRef.current) void requestKey();
+        }, 3000);
+      }
+      if (isOwnerNow && !keyBootstrapRef.current) {
+        const delay = memberCount <= 1 ? 0 : 2500;
+        keyBootstrapRef.current = setTimeout(() => {
+          keyBootstrapRef.current = null;
+          if (!contentKeyRef.current) void bootstrapOwnerKey();
+        }, delay);
+      }
+    };
+
     socket.on("connect", () => {
       // Fires on first connect and on every reconnect; re-identify resyncs
-      // state via the server's state:snapshot.
+      // state via the server's state:snapshot. Publish our E2EE public key so
+      // peers can wrap the bucket content key for us.
       setReconnecting(false);
-      socket.emit("identify", { slug, tab_id: sessionStore.tabId });
+      if (e2ee.e2eeSupported) {
+        e2ee
+          .getPublicKeyB64(slug)
+          .then((pubkey) =>
+            socket.emit("identify", {
+              slug,
+              tab_id: sessionStore.tabId,
+              pubkey,
+            })
+          )
+          .catch(() =>
+            socket.emit("identify", { slug, tab_id: sessionStore.tabId })
+          );
+      } else {
+        socket.emit("identify", { slug, tab_id: sessionStore.tabId });
+      }
+    });
+
+    // A peer asks for the content key: if we hold it, wrap it for them.
+    socket.on("e2ee:request_key", async (p) => {
+      const key = contentKeyRef.current;
+      if (!e2ee.e2eeSupported || !key) return;
+      try {
+        const { wrapped, iv } = await e2ee.wrapContentKey(slug, p.pubkey, key);
+        const from_pubkey = await e2ee.getPublicKeyB64(slug);
+        socket.emit("e2ee:deliver_key", {
+          to_user_id: p.from_user_id,
+          from_pubkey,
+          wrapped,
+          iv,
+        });
+      } catch {
+        /* ignore */
+      }
+    });
+
+    // A key-holder delivered the wrapped content key to us.
+    socket.on("e2ee:key", async (p) => {
+      if (!e2ee.e2eeSupported || contentKeyRef.current) return;
+      try {
+        contentKeyRef.current = await e2ee.unwrapContentKey(
+          slug,
+          p.from_pubkey,
+          p.wrapped,
+          p.iv
+        );
+        markKeyReady();
+      } catch {
+        /* ignore */
+      }
     });
 
     socket.on("disconnect", (reason) => {
@@ -220,6 +363,11 @@ export function useSession(slug: string) {
       // re-issues the cookie with the member Max-Age (sliding window). Also runs
       // on every reconnect to keep the HTTP cookie fresh. Fire-and-forget.
       api.snapshot(slug).catch(() => {});
+      // Acquire (or bootstrap) the bucket content key now that we know our role.
+      void ensureContentKey(
+        p.your_user_id === p.owner_user_id,
+        p.members.length
+      );
     });
 
     socket.on("members:list", (p) => setMembers(p.members));
@@ -406,11 +554,16 @@ export function useSession(slug: string) {
     );
 
     socket.on("kicked", () => {
+      contentKeyRef.current = null;
+      void e2ee.clearSession(slug);
       setStatus("fatal");
       setFatalMessage("You were removed from this session by the owner.");
       socket.disconnect();
     });
     socket.on("session:ended", () => {
+      // The session is gone for everyone — drop the cached keys either way.
+      contentKeyRef.current = null;
+      void e2ee.clearSession(slug);
       // The owner who initiates a leave also receives this broadcast; don't
       // flash the fatal screen at someone who chose to leave.
       if (leavingRef.current) return;
@@ -453,6 +606,7 @@ export function useSession(slug: string) {
     }
 
     return () => {
+      clearKeyTimers();
       for (const c of connRef.current.values()) c.cancel();
       connRef.current.clear();
       socket.disconnect();
@@ -635,6 +789,45 @@ export function useSession(slug: string) {
     },
     [frozen, slug, toast]
   );
+  // Fetch a bucket file, decrypt it if it carries our E2EE prefix, and trigger
+  // a browser download. Plaintext files (uploaded without E2EE) are saved as-is.
+  const downloadFile = useCallback(
+    async (entry: PublicBucketEntry) => {
+      if (frozen) {
+        toast("Session is frozen — files are locked.", "warn");
+        return;
+      }
+      try {
+        const res = await fetch(api.downloadUrl(slug, entry.id), {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error("download_failed");
+        const buf = await res.arrayBuffer();
+        let out: ArrayBuffer = buf;
+        if (e2ee.isEncrypted(buf)) {
+          const key = contentKeyRef.current;
+          if (!e2ee.e2eeSupported || !key) {
+            toast(
+              "Encryption key is still syncing — try again in a moment.",
+              "warn"
+            );
+            return;
+          }
+          out = await e2ee.decryptToBytes(buf, key);
+        }
+        e2ee.saveBlob(
+          new Blob([out], {
+            type: entry.content_type || "application/octet-stream",
+          }),
+          entry.name
+        );
+      } catch {
+        toast("Could not download that file.", "danger");
+      }
+    },
+    [frozen, slug, toast]
+  );
+
   const acceptOwnership = useCallback(() => {
     socketRef.current?.emit("owner_accept");
     setOwnerOffer(null);
@@ -647,6 +840,8 @@ export function useSession(slug: string) {
     () =>
       new Promise<void>((resolve) => {
         leavingRef.current = true;
+        contentKeyRef.current = null;
+        void e2ee.clearSession(slug);
         const socket = socketRef.current;
         if (!socket || socket.disconnected) {
           resolve();
@@ -680,7 +875,7 @@ export function useSession(slug: string) {
         socket.emit("leave", finish);
         window.setTimeout(finish, 1500);
       }),
-    [isOwner]
+    [isOwner, slug]
   );
 
   const deleteOwnUploads = useCallback(async () => {
@@ -717,6 +912,10 @@ export function useSession(slug: string) {
     ownerOffer,
     justAdded,
     hasActiveWork,
+    keyReady,
+    // True only when E2EE is actually in effect (secure context + key loaded);
+    // drives "end-to-end encrypted" UI copy so we never claim it falsely.
+    encryptionActive: e2ee.e2eeSupported && keyReady,
     nameOf,
     // actions
     startSend,
@@ -726,6 +925,7 @@ export function useSession(slug: string) {
     dismissTransfer,
     uploadFiles,
     deleteFile,
+    downloadFile,
     admit,
     reject,
     kick,

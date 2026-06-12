@@ -87,11 +87,19 @@ export interface ServerToClient {
     candidate: RTCIceCandidateInit;
   }) => void;
   "session:ended": (p: { reason: string }) => void;
+  // E2EE key exchange (server relays only; never sees the content key).
+  "e2ee:request_key": (p: { from_user_id: string; pubkey: string }) => void;
+  "e2ee:key": (p: {
+    from_user_id: string;
+    from_pubkey: string;
+    wrapped: string;
+    iv: string;
+  }) => void;
   error: (p: { code: string; message: string }) => void;
 }
 
 export interface ClientToServer {
-  identify: (p: { slug: string; tab_id: string }) => void;
+  identify: (p: { slug: string; tab_id: string; pubkey?: string }) => void;
   admit: (p: { knock_id: string }) => void;
   reject: (p: { knock_id: string }) => void;
   kick: (p: { user_id: string }) => void;
@@ -119,6 +127,14 @@ export interface ClientToServer {
   "webrtc:ice": (p: {
     transfer_id: string;
     candidate: RTCIceCandidateInit;
+  }) => void;
+  // E2EE key exchange.
+  "e2ee:request_key": (p: { pubkey: string }) => void;
+  "e2ee:deliver_key": (p: {
+    to_user_id: string;
+    from_pubkey: string;
+    wrapped: string;
+    iv: string;
   }) => void;
   leave: (ack: () => void) => void;
 }

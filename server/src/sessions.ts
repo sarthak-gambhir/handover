@@ -500,6 +500,7 @@ export class Store extends EventEmitter {
       display_name: m.display_name,
       is_owner: m.is_owner,
       online: m.socket_id !== null,
+      pubkey: m.pubkey ?? null,
     };
   }
 

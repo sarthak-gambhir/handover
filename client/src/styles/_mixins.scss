@@ -26,3 +26,21 @@
     @content;
   }
 }
+
+@mixin sm_down {
+  @media (max-width: calc(#{t.$bp_sm} - 0.02px)) {
+    @content;
+  }
+}
+
+@mixin md_up {
+  @media (min-width: t.$bp_md) {
+    @content;
+  }
+}
+
+@mixin md_down {
+  @media (max-width: calc(#{t.$bp_md} - 0.02px)) {
+    @content;
+  }
+}

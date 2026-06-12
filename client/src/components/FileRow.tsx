@@ -11,7 +11,9 @@ interface FileRowProps {
   uploaderName: string;
   isYours: boolean;
   justAdded: boolean;
-  downloadUrl: string;
+  // Fetches, decrypts (if needed), and saves the file. Omitted for the
+  // in-flight upload placeholder rows.
+  onDownload?: (entry: PublicBucketEntry) => void;
   onDelete: (id: string) => void;
   // Whether the current viewer may delete this file. Defaults to isYours; the
   // owner can delete any file (including orphaned ones).
@@ -27,7 +29,7 @@ export function FileRow({
   uploaderName,
   isYours,
   justAdded,
-  downloadUrl,
+  onDownload,
   onDelete,
   canDelete,
   progress,
@@ -77,23 +79,23 @@ export function FileRow({
           </Button>
         ) : (
           <>
-            <a
+            <button
+              type="button"
               className={cx(
                 "file_row_download",
                 frozen && "file_row_download_disabled"
               )}
-              href={frozen ? undefined : downloadUrl}
-              download={frozen ? undefined : entry.name}
+              disabled={frozen}
               aria-disabled={frozen || undefined}
               aria-label={
                 frozen
                   ? `Download ${entry.name} (locked while frozen)`
                   : `Download ${entry.name}`
               }
-              onClick={frozen ? (e) => e.preventDefault() : undefined}
+              onClick={frozen ? undefined : () => onDownload?.(entry)}
             >
               <RiDownloadLine size={16} />
-            </a>
+            </button>
             {showDelete && (
               <Button
                 size="sm"

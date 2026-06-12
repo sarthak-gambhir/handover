@@ -53,6 +53,25 @@ h3 {
   line-height: 1.2;
 }
 
+hr.horizontal_divider {
+  width: 100%;
+  border-style: solid;
+  border-width: 1px 0 0 0;
+  border-color: var(--fg_subtle);
+  margin-bottom: var(--space_4);
+
+  &.subtle {
+    border-color: var(--border_strong);
+  }
+
+  &.accent {
+    border-color: var(--accent);
+  }
+  &.accent_soft {
+    border-color: var(--accent_soft);
+  }
+}
+
 :focus-visible {
   outline: none;
 }

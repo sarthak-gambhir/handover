@@ -18,7 +18,7 @@
   grid-template-columns: 1fr;
   gap: var(--space_4);
 
-  @include m.sm_up {
+  @include m.md_up {
     grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
   }
 }
@@ -115,7 +115,7 @@
   // actions on the right: [Cancel] .... [Delete & leave] [Keep & leave].
   // DOM order is [Keep, Delete, Cancel] (so the mobile stack reads naturally),
   // so reorder via flex here.
-  @include m.sm_up {
+  @include m.md_up {
     .modal_footer {
       > :nth-child(1) {
         order: 3; // Keep & leave -> far right
@@ -136,7 +136,7 @@
 
   // Same footer treatment as the leave modal: [Cancel] .... [Transfer] [End].
   // DOM order is [Transfer, End, Cancel] so the mobile stack reads top-down.
-  @include m.sm_up {
+  @include m.md_up {
     .modal_footer {
       > :nth-child(1) {
         order: 2; // Transfer ownership -> middle
@@ -290,7 +290,7 @@
     display: none;
   }
 
-  @include m.sm_up {
+  @include m.md_up {
     .button_label {
       display: inline;
     }
@@ -303,6 +303,30 @@
   display: flex;
   align-items: center;
   gap: var(--space_2);
+}
+
+// "End-to-end encrypted" indicator, parallel with the Shared bucket title.
+.session_encrypted {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--success);
+}
+
+// Collapse to just the lock icon on small screens to save header space.
+.session_encrypted_label {
+  display: none;
+
+  @include m.md_up {
+    display: inline;
+  }
+}
+
+// "N online" count, parallel with the People title.
+.session_online {
+  font-size: 12px;
+  color: var(--fg_muted);
 }
 
 // Owner-only right group (owner tag + dropdown), pushed to the far right.
@@ -318,7 +342,7 @@
 .session_tabs {
   display: flex;
 
-  @include m.sm_up {
+  @include m.md_up {
     display: none;
   }
 }
@@ -337,32 +361,41 @@
   align-items: center;
   text-align: center;
   gap: var(--space_2);
-  padding: var(--space_7) var(--space_4);
+
+  .session_empty_container{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: var(--space_4);
+    padding-bottom: var(--space_8);
+    padding-top: var(--space_7);
+
+    .session_empty_icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius_lg);
+      background: var(--accent_soft);
+      color: var(--accent);
+    }
+
+    .session_empty_title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--fg);
+    }
+  }
 }
 
-.session_empty_icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius_lg);
-  background: var(--accent_soft);
-  color: var(--accent);
-  margin-bottom: var(--space_1);
-}
-
-.session_empty_title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--fg);
-}
 
 .session_empty_help {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--fg_muted);
   line-height: 1.5;
-  margin: var(--space_6) 0 var(--space_2);
+  margin: 0 0 var(--space_2) 0;
 }
 
 .session_empty_text {
@@ -391,7 +424,7 @@
 }
 
 // Mobile: one pane at a time, driven by the active tab.
-@media (max-width: 639.98px) {
+@include m.md_down {
   .session_rail {
     display: contents;
   }
@@ -408,7 +441,7 @@
 }
 
 // Desktop: workspace + rail side by side, all panes visible.
-@include m.sm_up {
+@include m.md_up {
   .session_panes {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);

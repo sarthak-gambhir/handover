@@ -11,8 +11,16 @@ export interface UploadHandle {
  * XHR-based upload so we get real progress events and cancellation. Sends the
  * `st_<slug>` cookie via `withCredentials`. Rejects with an `{ status, code }`
  * shaped error so the caller can surface 507 / 413 etc.
+ *
+ * `body` is the bytes to upload (the encrypted blob when E2EE is on, otherwise
+ * the raw file); `filename` is sent as the multipart field filename so the
+ * server stores the original name.
  */
-export function uploadWithProgress(slug: string, file: File): UploadHandle {
+export function uploadWithProgress(
+  slug: string,
+  body: Blob,
+  filename: string
+): UploadHandle {
   const xhr = new XMLHttpRequest();
   let progressCb: ((f: number) => void) | null = null;
 
@@ -49,7 +57,7 @@ export function uploadWithProgress(slug: string, file: File): UploadHandle {
     xhr.addEventListener("abort", () => reject({ status: 0, code: "aborted" }));
 
     const form = new FormData();
-    form.append("file", file);
+    form.append("file", body, filename);
     xhr.send(form);
   });
 

@@ -40,7 +40,6 @@ import { IncomingTransferModal } from "../components/IncomingTransferModal";
 import { TransferProgressRow } from "../components/TransferProgressRow";
 import { sessionStore } from "../lib/sessionStore";
 import { normalizeSlug } from "../lib/slug";
-import { api } from "../lib/api";
 import type { PublicMember } from "../lib/api";
 import { shortId } from "../lib/format";
 import "./Session.scss";
@@ -381,31 +380,50 @@ export function Session() {
           <Panel
             className="session_pane session_pane_files"
             title="Shared bucket"
-            icon={<RiFolder3Line size={16} />}
+            icon={<RiFolder3Line size={20} />}
             count={s.bucket.length}
+            actions={
+              s.encryptionActive ? (
+                <span
+                  className="session_encrypted"
+                  title="End-to-end encrypted"
+                >
+                  <RiLockLine size={18} />
+                  <span className="session_encrypted_label">
+                    End-to-end encrypted
+                  </span>
+                </span>
+              ) : undefined
+            }
           >
-            <UploadDropzone onFiles={s.uploadFiles} disabled={s.frozen} />
+            <UploadDropzone
+              onFiles={s.uploadFiles}
+              disabled={s.frozen}
+              encrypted={s.encryptionActive}
+            />
 
             {filesEmpty ? (
               <div className="session_empty">
-                <span className="session_empty_icon">
-                  <RiFile2Line size={26} />
-                </span>
-                <p className="session_empty_title">No files yet</p>
-                <p className="session_empty_help">
-                  {s.isOwner
-                    ? "Share the invite to bring people in, then drop files to share with everyone."
-                    : "Drop a file above to share it with everyone in the session."}
-                </p>
-                {s.isOwner && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    icon={<RiShareForwardLine size={16} />}
-                    onClick={() => setInviteOpen(true)}
-                  >
-                    Copy invite link
-                  </Button>
+                <div className="session_empty_container">
+                  <span className="session_empty_icon">
+                    <RiFile2Line size={26} />
+                  </span>
+                  <p className="session_empty_title">No files yet</p>
+                </div>
+
+                <hr className="horizontal_divider subtle" />
+
+                {s.isOwner ? (
+                  <>
+                    <p className="session_empty_help">
+                      Share the invite to bring people in, then drop files to
+                      share with everyone.
+                    </p>
+                  </>
+                ) : (
+                  <p className="session_empty_help">
+                    Drop a file above to share it with everyone in the session.
+                  </p>
                 )}
               </div>
             ) : (
@@ -417,7 +435,6 @@ export function Session() {
                     uploaderName="you"
                     isYours
                     justAdded={false}
-                    downloadUrl="#"
                     onDelete={() => undefined}
                     progress={u.fraction}
                     onCancelUpload={u.abort}
@@ -431,7 +448,7 @@ export function Session() {
                     isYours={e.uploader_id === s.yourUserId}
                     canDelete={e.uploader_id === s.yourUserId || s.isOwner}
                     justAdded={s.justAdded.has(e.id)}
-                    downloadUrl={api.downloadUrl(cleanSlug, e.id)}
+                    onDownload={s.downloadFile}
                     onDelete={s.deleteFile}
                     frozen={s.frozen}
                   />
@@ -444,9 +461,11 @@ export function Session() {
             <Panel
               className="session_pane session_pane_people"
               title="People"
-              icon={<RiGroupLine size={16} />}
+              icon={<RiGroupLine size={20} />}
               count={s.members.length}
-              meta={`${onlineCount} online`}
+              actions={
+                <span className="session_online">{onlineCount} online</span>
+              }
             >
               <ul className="session_member_list">
                 {s.members.map((m) => (
@@ -468,7 +487,7 @@ export function Session() {
             <Panel
               className="session_pane session_pane_activity"
               title="Activity"
-              icon={<RiArrowLeftRightLine size={16} />}
+              icon={<RiArrowLeftRightLine size={20} />}
               count={s.transfers.length || undefined}
             >
               {s.transfers.length === 0 ? (
