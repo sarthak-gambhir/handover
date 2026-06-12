@@ -15,12 +15,14 @@ export interface ServerToClient {
     frozen: boolean;
     members: PublicMember[];
     bucket: PublicBucketEntry[];
+    owner_grace_ms: number | null;
   }) => void;
   "members:list": (p: { members: PublicMember[] }) => void;
   "member:joined": (p: { member: PublicMember }) => void;
   "member:left": (p: { user_id: string }) => void;
   "member:online": (p: { user_id: string }) => void;
   "member:offline": (p: { user_id: string }) => void;
+  "owner:offline": (p: { grace_ms: number }) => void;
   "knock:new": (p: {
     knock_id: string;
     display_name: string;

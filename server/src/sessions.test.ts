@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Store } from "./sessions.js";
 import { config } from "./config.js";
 
@@ -138,6 +138,33 @@ describe("Store — session + knocker lifecycle", () => {
   });
 });
 
+describe("Store — owner grace handoff", () => {
+  it("transferOwnership cancels a pending owner teardown", () => {
+    vi.useFakeTimers();
+    try {
+      const { store, session } = freshMemberSession();
+      const member = store.admitKnocker(
+        session,
+        store.addKnocker(session, "Bob").knocker.knock_id
+      )!;
+      let fired = false;
+      session.owner_disconnected_at = Date.now();
+      session.owner_grace_timer = setTimeout(() => {
+        fired = true;
+      }, config.ownerGraceMs);
+
+      expect(store.transferOwnership(session, member.user_id)).toBe(true);
+      // The session now has a present owner again — grace state is reset.
+      expect(session.owner_disconnected_at).toBeNull();
+      expect(session.owner_grace_timer).toBeNull();
+      vi.advanceTimersByTime(config.ownerGraceMs + 1000);
+      expect(fired).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("Store — byte reservation", () => {
   it("rejects reservations that exceed the per-session cap", () => {
     const { store, session } = freshMemberSession();
@@ -201,6 +228,24 @@ describe("Store — sweeper", () => {
     session.owner_disconnected_at = now - config.ownerGraceMs - 1000;
     store.sweep(now);
     expect(store.sessions.has(session.slug)).toBe(false);
+  });
+
+  it("endSession cancels an armed owner_grace_timer", () => {
+    vi.useFakeTimers();
+    try {
+      const { store, session } = freshMemberSession();
+      let fired = false;
+      session.owner_disconnected_at = Date.now();
+      session.owner_grace_timer = setTimeout(() => {
+        fired = true;
+      }, config.ownerGraceMs);
+      store.endSession(session.slug, "test");
+      vi.advanceTimersByTime(config.ownerGraceMs + 1000);
+      // The teardown timer must not outlive the session it was guarding.
+      expect(fired).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("expires knockers older than the TTL and emits knock:expired", () => {

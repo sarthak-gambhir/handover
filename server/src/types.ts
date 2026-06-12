@@ -68,6 +68,10 @@ export type Session = {
   total_bytes: number;
   last_activity: number;
   owner_disconnected_at: number | null; // for owner grace
+  // Precise teardown timer armed when the owner goes offline; ends the session
+  // exactly at the grace deadline so the client countdown is truthful. The
+  // sweeper remains a backstop. Cleared on owner reconnect / ownership handoff.
+  owner_grace_timer: ReturnType<typeof setTimeout> | null;
   knocking_paused: boolean;
   // Owner-triggered "session compromised" freeze. When true the session is a
   // read-only snapshot: uploads/downloads/deletes/transfers/knock admit are all

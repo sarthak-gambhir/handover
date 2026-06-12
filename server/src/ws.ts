@@ -330,11 +330,29 @@ function handleIdentify(
   member.socket_id = socket.id;
   member.tab_id = tab_id;
   member.last_seen = Date.now();
-  if (member.is_owner) session.owner_disconnected_at = null;
+  if (member.is_owner) {
+    session.owner_disconnected_at = null;
+    // Cancel the pending teardown — the owner is back. Clients clear their
+    // countdown off the subsequent member:online broadcast below.
+    if (session.owner_grace_timer) {
+      clearTimeout(session.owner_grace_timer);
+      session.owner_grace_timer = null;
+    }
+  }
 
   socket.data = { slug, role: "member", user_id: member.user_id, tab_id };
   socket.join(room(slug));
   store.touch(session);
+
+  // If the owner is mid-grace, hand the joiner/reconnector the remaining time
+  // so they can resume the countdown (they missed the owner:offline broadcast).
+  const owner_grace_ms =
+    session.owner_disconnected_at !== null
+      ? Math.max(
+          0,
+          session.owner_disconnected_at + config.ownerGraceMs - Date.now()
+        )
+      : null;
 
   socket.emit("state:snapshot", {
     slug: session.slug,
@@ -344,6 +362,7 @@ function handleIdentify(
     frozen: session.frozen,
     members: store.publicMembers(session),
     bucket: store.publicBucket(session),
+    owner_grace_ms,
   });
   io.to(room(slug)).emit("member:online", { user_id: member.user_id });
   broadcastMembers(io, session);
@@ -985,6 +1004,25 @@ function handleDisconnect(io: Server, socket: AppSocket): void {
       });
       broadcastMembers(io, session);
       cancelPeerTransfers(io, session, member.user_id);
+
+      // The owner is the trust anchor: once they're confirmed offline, surface
+      // the real grace deadline to the room and arm a precise teardown so the
+      // session ends exactly when the countdown does (the sweeper stays as a
+      // backstop). Both the emitted deadline and the timer are anchored to
+      // owner_disconnected_at so the displayed countdown matches the teardown.
+      if (member.is_owner && session.owner_disconnected_at !== null) {
+        const grace_ms = Math.max(
+          0,
+          session.owner_disconnected_at + config.ownerGraceMs - Date.now()
+        );
+        io.to(room(session.slug)).emit("owner:offline", { grace_ms });
+        if (session.owner_grace_timer) clearTimeout(session.owner_grace_timer);
+        session.owner_grace_timer = setTimeout(() => {
+          session.owner_grace_timer = null;
+          if (member.socket_id !== null) return; // reconnected during grace
+          store.endSession(session.slug, "owner_left");
+        }, grace_ms);
+      }
     }, config.presenceGraceMs);
   }
 }

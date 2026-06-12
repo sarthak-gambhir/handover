@@ -77,6 +77,16 @@ export function Session() {
   ).length;
   const otherMembers = s.members.filter((m) => m.user_id !== s.yourUserId);
 
+  // Tick once a second only while an owner-disconnect countdown is active, so
+  // the banner's M:SS display stays current without re-rendering otherwise.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (s.ownerGraceEndsAt == null) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [s.ownerGraceEndsAt]);
+
   // Warn before leaving with active work.
   useEffect(() => {
     function onBeforeUnload(e: BeforeUnloadEvent) {
@@ -148,6 +158,20 @@ export function Session() {
 
   const onlineCount = s.members.filter((m) => m.online).length;
   const filesEmpty = s.bucket.length === 0 && s.uploads.length === 0;
+
+  // Owner-disconnect countdown: shown to remaining members while the owner is
+  // offline. The server ends the session at this deadline, so the M:SS we show
+  // reflects the real teardown moment.
+  const ownerGraceRemainingMs =
+    s.ownerGraceEndsAt != null ? Math.max(0, s.ownerGraceEndsAt - now) : null;
+  const showOwnerGrace = ownerGraceRemainingMs != null && !s.isOwner;
+  const ownerGraceClock = (() => {
+    if (ownerGraceRemainingMs == null) return "0:00";
+    const total = Math.ceil(ownerGraceRemainingMs / 1000);
+    const m = Math.floor(total / 60);
+    const sec = total % 60;
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  })();
 
   const slugChip = (
     <button
@@ -285,6 +309,18 @@ export function Session() {
           >
             <RiWifiOffLine size={16} />
             Connection lost — reconnecting…
+          </div>
+        )}
+
+        {showOwnerGrace && (
+          <div
+            className="session_owner_offline_banner"
+            role="status"
+            aria-live="polite"
+          >
+            <RiWifiOffLine size={16} />
+            Owner disconnected — session ends in {ownerGraceClock} unless they
+            return.
           </div>
         )}
 

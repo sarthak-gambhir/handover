@@ -92,6 +92,7 @@ export class Store extends EventEmitter {
       total_bytes: 0,
       last_activity: now,
       owner_disconnected_at: null,
+      owner_grace_timer: null,
       knocking_paused: false,
       frozen: false,
       pending_owner_offer: null,
@@ -130,6 +131,7 @@ export class Store extends EventEmitter {
     for (const m of session.members.values()) {
       if (m.offline_grace_timer) clearTimeout(m.offline_grace_timer);
     }
+    if (session.owner_grace_timer) clearTimeout(session.owner_grace_timer);
     this.sessions.delete(session.slug);
     this.emit("session:ended", { slug: session.slug, reason });
   }
@@ -326,6 +328,13 @@ export class Store extends EventEmitter {
     if (nextTok && nextTok.status === "member") nextTok.is_owner = true;
     session.owner_user_id = to_user_id;
     session.pending_owner_offer = null;
+    // A handoff while the previous owner was offline must cancel the pending
+    // teardown — the session now has a (present) owner again.
+    session.owner_disconnected_at = null;
+    if (session.owner_grace_timer) {
+      clearTimeout(session.owner_grace_timer);
+      session.owner_grace_timer = null;
+    }
     this.touch(session);
     return true;
   }

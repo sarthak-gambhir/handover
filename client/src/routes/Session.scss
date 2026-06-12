@@ -253,6 +253,22 @@
   font-size: 0.875rem;
 }
 
+// Owner-disconnect countdown — shown to remaining members while the owner is
+// offline, ticking down to the moment the session is torn down.
+.session_owner_offline_banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space_2);
+  padding: var(--space_2) var(--space_3);
+  background: var(--bg_overlay);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius_md);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
 // "Session compromised" freeze banner — shown to everyone while frozen.
 .session_frozen_banner {
   display: flex;

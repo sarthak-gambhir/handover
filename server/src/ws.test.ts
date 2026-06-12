@@ -462,6 +462,55 @@ describe('session freeze ("halt all activity")', () => {
   });
 });
 
+describe("owner disconnect grace countdown", () => {
+  beforeEach(() => {
+    store.sessions.clear();
+    store.tokens.clear();
+  });
+
+  it("owner drop arms a countdown that an owner reconnect cancels", async () => {
+    const s = await setup();
+    // After the presence grace, remaining members learn the real deadline.
+    const offline = once<{ grace_ms: number }>(s.A.sock, "owner:offline", 9000);
+    s.O.sock.disconnect();
+    const { grace_ms } = await offline;
+    expect(grace_ms).toBeGreaterThan(0);
+    expect(grace_ms).toBeLessThanOrEqual(config.ownerGraceMs);
+    expect(s.session.owner_disconnected_at).not.toBeNull();
+    expect(s.session.owner_grace_timer).not.toBeNull();
+
+    // Owner returns before the deadline -> the pending teardown is cancelled.
+    const ownerToken = s.session.members.get(s.O.id)!.session_token;
+    const oSock2 = connect(s.slug, ownerToken);
+    await identify(oSock2, s.slug, "tab-o");
+    expect(s.session.owner_disconnected_at).toBeNull();
+    expect(s.session.owner_grace_timer).toBeNull();
+  }, 12000);
+
+  it("a snapshot carries owner_grace_ms while the owner is offline", async () => {
+    const s = await setup();
+    const offline = once(s.A.sock, "owner:offline", 9000);
+    s.O.sock.disconnect();
+    await offline;
+
+    // A member reconnecting mid-grace must be able to resume the countdown.
+    s.A.sock.disconnect();
+    const aToken = s.session.members.get(s.A.id)!.session_token;
+    const aSock2 = connect(s.slug, aToken);
+    const snap = once<{ owner_grace_ms: number | null }>(
+      aSock2,
+      "state:snapshot"
+    );
+    aSock2.emit("identify", { slug: s.slug, tab_id: "tab-a" });
+    const got = await snap;
+    expect(got.owner_grace_ms).not.toBeNull();
+    expect(got.owner_grace_ms!).toBeGreaterThan(0);
+
+    // Avoid leaking the armed teardown timer past the test.
+    if (s.session.owner_grace_timer) clearTimeout(s.session.owner_grace_timer);
+  }, 12000);
+});
+
 describe("one tab per session", () => {
   beforeEach(() => {
     store.sessions.clear();

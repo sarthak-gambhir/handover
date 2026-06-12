@@ -44,6 +44,9 @@ export function useSession(slug: string) {
   } | null>(null);
   const [yourUserId, setYourUserId] = useState("");
   const [ownerUserId, setOwnerUserId] = useState("");
+  // Absolute local time when the owner-disconnect grace expires (session ends),
+  // or null when the owner is present. Drives the countdown banner.
+  const [ownerGraceEndsAt, setOwnerGraceEndsAt] = useState<number | null>(null);
   const [transfers, setTransfers] = useState<TransferVM[]>([]);
   const [incoming, setIncoming] = useState<IncomingRequest | null>(null);
   const [ownerOffer, setOwnerOffer] = useState<{ from_user_id: string } | null>(
@@ -204,6 +207,9 @@ export function useSession(slug: string) {
       setFrozenState(p.frozen);
       setMembers(p.members);
       setBucket(p.bucket);
+      setOwnerGraceEndsAt(
+        p.owner_grace_ms != null ? Date.now() + p.owner_grace_ms : null
+      );
       sessionStore.set({
         slug,
         user_id: p.your_user_id,
@@ -224,18 +230,31 @@ export function useSession(slug: string) {
           : [...prev, p.member]
       )
     );
-    socket.on("member:left", (p) =>
-      setMembers((prev) => prev.filter((m) => m.user_id !== p.user_id))
-    );
-    socket.on("member:online", (p) =>
+    socket.on("member:left", (p) => {
+      setMembers((prev) => prev.filter((m) => m.user_id !== p.user_id));
+      // If the owner themselves left, any pending grace countdown is moot.
+      setOwnerUserId((owner) => {
+        if (p.user_id === owner) setOwnerGraceEndsAt(null);
+        return owner;
+      });
+    });
+    socket.on("member:online", (p) => {
       setMembers((prev) =>
         prev.map((m) => (m.user_id === p.user_id ? { ...m, online: true } : m))
-      )
-    );
+      );
+      // The owner reconnected — stop the countdown.
+      setOwnerUserId((owner) => {
+        if (p.user_id === owner) setOwnerGraceEndsAt(null);
+        return owner;
+      });
+    });
     socket.on("member:offline", (p) =>
       setMembers((prev) =>
         prev.map((m) => (m.user_id === p.user_id ? { ...m, online: false } : m))
       )
+    );
+    socket.on("owner:offline", (p) =>
+      setOwnerGraceEndsAt(Date.now() + p.grace_ms)
     );
 
     socket.on("knock:new", (p) =>
@@ -286,6 +305,8 @@ export function useSession(slug: string) {
           is_owner: m.user_id === p.new_owner_user_id,
         }))
       );
+      // New owner is present — cancel any owner-disconnect countdown.
+      setOwnerGraceEndsAt(null);
     });
     socket.on("owner_offered", (p) =>
       setOwnerOffer({ from_user_id: p.from_user_id })
@@ -688,6 +709,7 @@ export function useSession(slug: string) {
     inviteUsed,
     yourUserId,
     ownerUserId,
+    ownerGraceEndsAt,
     isOwner,
     uploads,
     transfers,
