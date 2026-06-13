@@ -187,6 +187,37 @@ describe("signaling state machine", () => {
     expect(s.session.transfers.get(transfer_id)?.state).toBe("closed");
   });
 
+  it("relays the receiver's file selection (sanitized) to the sender", async () => {
+    const s = await setup();
+    const recv = once<{ transfer_id: string }>(s.B.sock, "transfer:request");
+    s.A.sock.emit("transfer:request", {
+      to_user_id: s.B.id,
+      files: [
+        { name: "a", size: 1 },
+        { name: "b", size: 2 },
+        { name: "c", size: 3 },
+      ],
+    });
+    const transfer_id = (await recv).transfer_id;
+
+    const resp = once<{ accepted: boolean; selected?: number[] }>(
+      s.A.sock,
+      "transfer:response"
+    );
+    // Includes a duplicate, an out-of-range index, and an unordered pair.
+    s.B.sock.emit("transfer:response", {
+      transfer_id,
+      accepted: true,
+      selected: [2, 0, 0, 99, -1],
+    });
+    const got = await resp;
+    expect(got.accepted).toBe(true);
+    expect(got.selected).toEqual([0, 2]);
+    // Server narrows its file record to the accepted subset.
+    const files = s.session.transfers.get(transfer_id)!.files;
+    expect(files.map((f) => f.name)).toEqual(["a", "c"]);
+  });
+
   it("server issues the transfer_id; the client never proposes one", async () => {
     const s = await setup();
     const recv = once<{ transfer_id: string }>(s.B.sock, "transfer:request");

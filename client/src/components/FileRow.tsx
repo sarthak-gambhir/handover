@@ -1,4 +1,4 @@
-import { RiDownloadLine, RiDeleteBin6Line, RiFileLine } from "react-icons/ri";
+import { RiDownloadLine, RiDeleteBin6Line } from "react-icons/ri";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
 import type { PublicBucketEntry } from "../lib/api";
@@ -22,6 +22,10 @@ interface FileRowProps {
   onCancelUpload?: () => void;
   // When the session is frozen, downloads and deletes are locked.
   frozen?: boolean;
+  // Multi-select for bulk download/delete. Only stored rows are selectable.
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
 export function FileRow({
@@ -35,27 +39,52 @@ export function FileRow({
   progress,
   onCancelUpload,
   frozen = false,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
 }: FileRowProps) {
   const showDelete = (canDelete ?? isYours) && !frozen;
   const uploading = progress !== undefined;
   return (
-    <li className={cx("file_row", justAdded && "file_row_just_added")}>
-      <RiFileLine className="file_row_icon" size={18} />
-      <div className="file_row_main">
+    <li
+      className={cx(
+        "file_row",
+        justAdded && "file_row_just_added",
+        selected && "file_row_selected"
+      )}
+    >
+      {selectable && (
+        <input
+          type="checkbox"
+          className="file_row_check"
+          checked={selected}
+          onChange={() => onToggleSelect?.(entry.id)}
+          aria-label={`Select ${entry.name}`}
+        />
+      )}
+
+      <div
+        className="file_row_info"
+        onClick={selectable ? () => onToggleSelect?.(entry.id) : undefined}
+      >
         <span className="file_row_name" title={entry.name}>
           {entry.name}
         </span>
+
         <div className="file_row_meta">
           <span className="file_row_size">{formatBytes(entry.size)}</span>
+
           <Badge variant={isYours ? "accent" : "neutral"}>
             {isYours ? "you" : uploaderName}
           </Badge>
+
           {!uploading && (
             <span className="file_row_time">
               {relativeTime(entry.created_at)}
             </span>
           )}
         </div>
+
         {uploading && (
           <div
             className="file_row_progress"
@@ -72,6 +101,7 @@ export function FileRow({
           </div>
         )}
       </div>
+
       <div className="file_row_actions">
         {uploading ? (
           <Button size="sm" variant="ghost" onClick={onCancelUpload}>

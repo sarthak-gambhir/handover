@@ -35,15 +35,26 @@ export function Modal({
   const titleId = `${baseId}_title`;
   const bodyId = `${baseId}_body`;
 
+  // Focus the first focusable element once when the modal opens, and restore
+  // focus when it closes. Keyed only on `open` so re-renders (e.g. typing in a
+  // field, which can hand us a fresh inline `onClose`) don't steal focus.
   useEffect(() => {
     if (!open) return;
     lastFocused.current = document.activeElement as HTMLElement | null;
-    const card = cardRef.current;
-    card
+    cardRef.current
       ?.querySelector<HTMLElement>("button, [href], input, select, textarea")
       ?.focus();
+    return () => {
+      lastFocused.current?.focus?.();
+    };
+  }, [open]);
 
+  // Esc-to-close and focus trapping use the latest `locked`/`onClose`, so this
+  // effect re-binds when they change — without touching focus.
+  useEffect(() => {
+    if (!open) return;
     function onKey(e: KeyboardEvent) {
+      const card = cardRef.current;
       if (e.key === "Escape" && !locked) onClose();
       if (e.key === "Tab" && card) {
         const focusables = card.querySelectorAll<HTMLElement>(
@@ -62,10 +73,7 @@ export function Modal({
       }
     }
     document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      lastFocused.current?.focus?.();
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open, locked, onClose]);
 
   if (!mounted) return null;

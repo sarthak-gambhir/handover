@@ -355,6 +355,123 @@
   gap: var(--space_2);
 }
 
+// Bucket multi-select toolbar (select-all + bulk download/delete).
+.session_bucket_toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space_3);
+  min-height: 32px;
+  margin: var(--space_3) 0;
+}
+
+.session_bucket_selectall {
+  display: flex;
+  align-items: center;
+  gap: var(--space_2);
+  font-size: 13px;
+  color: var(--fg_muted);
+  cursor: pointer;
+
+  input {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+}
+
+.session_bucket_toolbar_actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space_1);
+
+  // On small screens collapse the action buttons to just their icons; the
+  // accessible names live on aria-label so they stay reachable.
+  .button_label {
+    display: none;
+
+    @include m.sm_up {
+      display: inline;
+    }
+  }
+}
+
+.session_bucket_delete {
+  color: var(--danger);
+}
+
+.session_bucket_hint {
+  padding: var(--space_4) 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--fg_muted);
+}
+
+// Bulk-download confirmation file list.
+.session_download_note {
+  margin-bottom: var(--space_3);
+  font-size: 13px;
+  color: var(--fg_muted);
+}
+
+.session_download_name_field {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space_2);
+  margin-bottom: var(--space_4);
+
+  .input_field {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.session_download_name_suffix {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  font-size: 14px;
+  color: var(--fg_muted);
+  white-space: nowrap;
+}
+
+.session_download_list {
+  display: flex;
+  flex-direction: column;
+  max-height: 264px;
+  overflow-y: auto;
+  padding-right: var(--space_2);
+}
+
+.session_download_item {
+  display: flex;
+  align-items: center;
+  gap: var(--space_3);
+  padding: var(--space_3) 0;
+  font-size: 14px;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+.session_download_name {
+  @include m.truncate;
+  flex: 1;
+  min-width: 0;
+  color: var(--fg);
+}
+
+.session_download_size {
+  @include m.mono_text;
+  flex-shrink: 0;
+  min-width: 64px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--fg_muted);
+}
+
 .session_empty {
   display: flex;
   flex-direction: column;
@@ -362,7 +479,7 @@
   text-align: center;
   gap: var(--space_2);
 
-  .session_empty_container{
+  .session_empty_container {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -389,7 +506,6 @@
     }
   }
 }
-
 
 .session_empty_help {
   font-size: 12px;

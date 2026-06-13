@@ -19,6 +19,7 @@ import {
 import { useBucketUploads } from "./use_bucket_uploads";
 import { randomId } from "./id";
 import * as e2ee from "./e2ee";
+import { downloadZip } from "client-zip";
 
 type Conn = SenderConnection | ReceiverConnection;
 
@@ -49,7 +50,14 @@ export function useSession(slug: string) {
   // or null when the owner is present. Drives the countdown banner.
   const [ownerGraceEndsAt, setOwnerGraceEndsAt] = useState<number | null>(null);
   const [transfers, setTransfers] = useState<TransferVM[]>([]);
-  const [incoming, setIncoming] = useState<IncomingRequest | null>(null);
+  // Pending incoming transfer prompts, handled one at a time. New requests
+  // queue behind the current one instead of clobbering it; `incoming` is the
+  // head shown in the modal.
+  const [incomingQueue, setIncomingQueue] = useState<IncomingRequest[]>([]);
+  const incoming = incomingQueue[0] ?? null;
+  const removeIncoming = useCallback((transfer_id: string) => {
+    setIncomingQueue((q) => q.filter((r) => r.transfer_id !== transfer_id));
+  }, []);
   const [ownerOffer, setOwnerOffer] = useState<{ from_user_id: string } | null>(
     null
   );
@@ -490,12 +498,19 @@ export function useSession(slug: string) {
     });
 
     socket.on("transfer:request", (p) => {
-      setIncoming({
-        transfer_id: p.transfer_id,
-        from_user_id: p.from_user_id,
-        from_name: nameOf(p.from_user_id),
-        files: p.files,
-      });
+      setIncomingQueue((q) =>
+        q.some((r) => r.transfer_id === p.transfer_id)
+          ? q
+          : [
+              ...q,
+              {
+                transfer_id: p.transfer_id,
+                from_user_id: p.from_user_id,
+                from_name: nameOf(p.from_user_id),
+                files: p.files,
+              },
+            ]
+      );
     });
 
     socket.on("transfer:response", async (p) => {
@@ -504,9 +519,25 @@ export function useSession(slug: string) {
         toast("Transfer declined.", "warn");
         return;
       }
-      patchTransferById(p.transfer_id, { status: "connecting" });
-      const files = filesRef.current.get(p.transfer_id);
-      if (!files) return;
+      const allFiles = filesRef.current.get(p.transfer_id);
+      if (!allFiles) return;
+      // Honor the receiver's per-file selection: only stream the chosen files.
+      // Absent `selected` (older receiver) means send everything.
+      const files = p.selected
+        ? p.selected
+            .filter((i) => i >= 0 && i < allFiles.length)
+            .map((i) => allFiles[i])
+        : allFiles;
+      // The receiver deselected everything — treat it as a decline.
+      if (files.length === 0) {
+        setTerminalById(p.transfer_id, "declined", "No files were accepted.");
+        return;
+      }
+      filesRef.current.set(p.transfer_id, files);
+      patchTransferById(p.transfer_id, {
+        status: "connecting",
+        files: files.map((f) => ({ name: f.name, size: f.size })),
+      });
       try {
         const { iceServers } = await api.turn(slug);
         const conn = new SenderConnection(
@@ -544,7 +575,7 @@ export function useSession(slug: string) {
         "cancelled",
         p.reason === "peer_left" ? "The other person left." : "Cancelled."
       );
-      setIncoming((cur) => (cur?.transfer_id === p.transfer_id ? null : cur));
+      removeIncoming(p.transfer_id);
     });
     socket.on("transfer:expired", (p) =>
       setTerminalById(p.transfer_id, "failed", "Timed out.")
@@ -653,10 +684,24 @@ export function useSession(slug: string) {
   );
 
   const acceptIncoming = useCallback(
-    async (req: IncomingRequest) => {
+    async (req: IncomingRequest, selected: number[], zipName?: string) => {
       const socket = socketRef.current;
       if (!socket) return;
-      setIncoming(null);
+      // Nothing selected is the same as declining.
+      if (selected.length === 0) {
+        socket.emit("transfer:response", {
+          transfer_id: req.transfer_id,
+          accepted: false,
+        });
+        removeIncoming(req.transfer_id);
+        return;
+      }
+      removeIncoming(req.transfer_id);
+      // The sender only streams the selected files, so the receiver's row
+      // should reflect just those.
+      const chosen = selected
+        .filter((i) => i >= 0 && i < req.files.length)
+        .map((i) => req.files[i]);
       setTransfers((prev) => [
         ...prev,
         {
@@ -665,7 +710,7 @@ export function useSession(slug: string) {
           role: "receiver",
           peer_user_id: req.from_user_id,
           peer_name: req.from_name,
-          files: req.files,
+          files: chosen,
           fraction: 0,
           status: "connecting",
         },
@@ -674,12 +719,14 @@ export function useSession(slug: string) {
         const { iceServers } = await api.turn(slug);
         const conn = new ReceiverConnection(
           iceServers,
-          buildReceiverCallbacks(req.transfer_id)
+          buildReceiverCallbacks(req.transfer_id),
+          zipName
         );
         connRef.current.set(req.transfer_id, conn);
         socket.emit("transfer:response", {
           transfer_id: req.transfer_id,
           accepted: true,
+          selected,
         });
       } catch {
         // Tell the sender we can't receive instead of leaving it hanging in
@@ -695,16 +742,19 @@ export function useSession(slug: string) {
         );
       }
     },
-    [slug, setTerminalById, buildReceiverCallbacks]
+    [slug, setTerminalById, buildReceiverCallbacks, removeIncoming]
   );
 
-  const declineIncoming = useCallback((req: IncomingRequest) => {
-    socketRef.current?.emit("transfer:response", {
-      transfer_id: req.transfer_id,
-      accepted: false,
-    });
-    setIncoming(null);
-  }, []);
+  const declineIncoming = useCallback(
+    (req: IncomingRequest) => {
+      socketRef.current?.emit("transfer:response", {
+        transfer_id: req.transfer_id,
+        accepted: false,
+      });
+      removeIncoming(req.transfer_id);
+    },
+    [removeIncoming]
+  );
 
   const cancelTransfer = useCallback(
     (t: TransferVM) => {
@@ -789,8 +839,26 @@ export function useSession(slug: string) {
     },
     [frozen, slug, toast]
   );
-  // Fetch a bucket file, decrypt it if it carries our E2EE prefix, and trigger
-  // a browser download. Plaintext files (uploaded without E2EE) are saved as-is.
+  // Fetch a bucket file and decrypt it if it carries our E2EE prefix. Throws on
+  // network error; throws "key_not_ready" when an encrypted file can't be
+  // opened yet. Shared by single- and multi-file download.
+  const fetchDecrypted = useCallback(
+    async (entry: PublicBucketEntry): Promise<ArrayBuffer> => {
+      const res = await fetch(api.downloadUrl(slug, entry.id), {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("download_failed");
+      const buf = await res.arrayBuffer();
+      if (!e2ee.isEncrypted(buf)) return buf;
+      const key = contentKeyRef.current;
+      if (!e2ee.e2eeSupported || !key) throw new Error("key_not_ready");
+      return e2ee.decryptToBytes(buf, key);
+    },
+    [slug]
+  );
+
+  // Fetch a bucket file, decrypt it if needed, and trigger a browser download.
+  // Plaintext files (uploaded without E2EE) are saved as-is.
   const downloadFile = useCallback(
     async (entry: PublicBucketEntry) => {
       if (frozen) {
@@ -798,31 +866,104 @@ export function useSession(slug: string) {
         return;
       }
       try {
-        const res = await fetch(api.downloadUrl(slug, entry.id), {
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error("download_failed");
-        const buf = await res.arrayBuffer();
-        let out: ArrayBuffer = buf;
-        if (e2ee.isEncrypted(buf)) {
-          const key = contentKeyRef.current;
-          if (!e2ee.e2eeSupported || !key) {
-            toast(
-              "Encryption key is still syncing — try again in a moment.",
-              "warn"
-            );
-            return;
-          }
-          out = await e2ee.decryptToBytes(buf, key);
-        }
+        const out = await fetchDecrypted(entry);
         e2ee.saveBlob(
           new Blob([out], {
             type: entry.content_type || "application/octet-stream",
           }),
           entry.name
         );
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.message === "key_not_ready") {
+          toast(
+            "Encryption key is still syncing — try again in a moment.",
+            "warn"
+          );
+          return;
+        }
         toast("Could not download that file.", "danger");
+      }
+    },
+    [frozen, fetchDecrypted, toast]
+  );
+
+  // Fetch + decrypt every selected file and save them together as one .zip, so
+  // the user gets a single save prompt instead of one per file.
+  const downloadFilesZip = useCallback(
+    async (entries: PublicBucketEntry[], zipName?: string) => {
+      if (frozen) {
+        toast("Session is frozen — files are locked.", "warn");
+        return;
+      }
+      if (entries.length === 0) return;
+      if (entries.length === 1) {
+        await downloadFile(entries[0]);
+        return;
+      }
+      try {
+        // Disambiguate duplicate names (e.g. two "photo.jpg" from different
+        // uploaders) so the archive doesn't collide entries.
+        const used = new Map<string, number>();
+        const uniqueName = (name: string): string => {
+          const seen = used.get(name) ?? 0;
+          used.set(name, seen + 1);
+          if (seen === 0) return name;
+          const dot = name.lastIndexOf(".");
+          return dot > 0
+            ? `${name.slice(0, dot)} (${seen})${name.slice(dot)}`
+            : `${name} (${seen})`;
+        };
+        const files = await Promise.all(
+          entries.map(async (entry) => ({
+            name: uniqueName(entry.name),
+            lastModified: new Date(entry.created_at),
+            input: await fetchDecrypted(entry),
+          }))
+        );
+        const blob = await downloadZip(files).blob();
+        // Sanitize the user-supplied name: drop any path separators / illegal
+        // characters and a trailing ".zip", falling back to a sensible default.
+        const fallback = `handover-${slug}`;
+        const base =
+          (zipName ?? fallback)
+            .trim()
+            .replace(/\.zip$/i, "")
+            .replace(/[\\/:*?"<>|\x00-\x1f]+/g, "_")
+            .slice(0, 120)
+            .trim() || fallback;
+        e2ee.saveBlob(blob, `${base}.zip`);
+      } catch (err) {
+        if (err instanceof Error && err.message === "key_not_ready") {
+          toast(
+            "Encryption key is still syncing — try again in a moment.",
+            "warn"
+          );
+          return;
+        }
+        toast("Could not download those files.", "danger");
+      }
+    },
+    [frozen, fetchDecrypted, downloadFile, slug, toast]
+  );
+
+  // Bulk-delete the given bucket files (owner action; selected files may belong
+  // to different uploaders). The server emits file:removed for each.
+  const deleteFiles = useCallback(
+    async (ids: string[]) => {
+      if (frozen) {
+        toast("Session is frozen — files are locked.", "warn");
+        return;
+      }
+      if (ids.length === 0) return;
+      const results = await Promise.allSettled(
+        ids.map((id) => api.deleteFile(slug, id))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) {
+        toast(
+          `Could not delete ${failed} of ${ids.length} file${ids.length === 1 ? "" : "s"}.`,
+          "danger"
+        );
       }
     },
     [frozen, slug, toast]
@@ -926,6 +1067,8 @@ export function useSession(slug: string) {
     uploadFiles,
     deleteFile,
     downloadFile,
+    downloadFilesZip,
+    deleteFiles,
     admit,
     reject,
     kick,

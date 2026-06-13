@@ -66,6 +66,9 @@ export interface ServerToClient {
     transfer_id: string;
     to_user_id: string;
     accepted: boolean;
+    // Indices (into the original request's files[]) the receiver accepted.
+    // Absent means all files (older clients).
+    selected?: number[];
   }) => void;
   "transfer:cancelled": (p: {
     transfer_id: string;
@@ -113,7 +116,11 @@ export interface ClientToServer {
     files: TransferFileMeta[];
     client_ref?: string;
   }) => void;
-  "transfer:response": (p: { transfer_id: string; accepted: boolean }) => void;
+  "transfer:response": (p: {
+    transfer_id: string;
+    accepted: boolean;
+    selected?: number[];
+  }) => void;
   "transfer:cancel": (p: { transfer_id: string; reason?: string }) => void;
   "transfer:complete": (p: { transfer_id: string }) => void;
   "webrtc:offer": (p: {

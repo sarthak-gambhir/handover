@@ -13,6 +13,9 @@ import {
   RiLockLine,
   RiLockUnlockLine,
   RiDeleteBin6Line,
+  RiDownloadLine,
+  RiEyeLine,
+  RiEyeOffLine,
   RiWifiOffLine,
   RiErrorWarningLine,
   RiStopCircleLine,
@@ -28,6 +31,7 @@ import { Tabs } from "../components/ui/Tabs";
 import { StateScreen } from "../components/ui/StateScreen";
 import { Button } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
+import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
 import { Skeleton } from "../components/ui/Skeleton";
 import { MemberRow } from "../components/MemberRow";
@@ -41,7 +45,7 @@ import { TransferProgressRow } from "../components/TransferProgressRow";
 import { sessionStore } from "../lib/sessionStore";
 import { normalizeSlug } from "../lib/slug";
 import type { PublicMember } from "../lib/api";
-import { shortId } from "../lib/format";
+import { shortId, formatBytes } from "../lib/format";
 import "./Session.scss";
 
 type SessionTab = "files" | "people" | "activity";
@@ -60,6 +64,11 @@ export function Session() {
   const [deleteUploadsTarget, setDeleteUploadsTarget] =
     useState<PublicMember | null>(null);
   const [confirmOrphaned, setConfirmOrphaned] = useState(false);
+  const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
+  const [confirmDownload, setConfirmDownload] = useState(false);
+  const [zipName, setZipName] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [hideMine, setHideMine] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [confirmOwnerLeave, setConfirmOwnerLeave] = useState(false);
   const [ownerTransferPick, setOwnerTransferPick] = useState(false);
@@ -75,6 +84,47 @@ export function Session() {
     (e) => e.uploader_id === s.yourUserId
   ).length;
   const otherMembers = s.members.filter((m) => m.user_id !== s.yourUserId);
+
+  // Optionally hide your own uploads to focus on what others have shared.
+  const visibleBucket = hideMine
+    ? s.bucket.filter((e) => e.uploader_id !== s.yourUserId)
+    : s.bucket;
+
+  // Bucket multi-select (download for everyone; bulk delete is owner-only since
+  // selected files may belong to different uploaders). Selection and select-all
+  // operate on the currently visible files.
+  const bucketIds = visibleBucket.map((e) => e.id);
+  const selectedEntries = visibleBucket.filter((e) => selectedFiles.has(e.id));
+  const selectedCount = selectedEntries.length;
+  const allSelected =
+    bucketIds.length > 0 && bucketIds.every((id) => selectedFiles.has(id));
+
+  // Drop selections for files that have been removed (deleted, kicked uploader).
+  useEffect(() => {
+    setSelectedFiles((prev) => {
+      if (prev.size === 0) return prev;
+      const ids = new Set(s.bucket.map((e) => e.id));
+      const next = new Set<string>();
+      for (const id of prev) if (ids.has(id)) next.add(id);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [s.bucket]);
+
+  function toggleFile(id: string) {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function toggleAllFiles() {
+    setSelectedFiles(allSelected ? new Set() : new Set(bucketIds));
+  }
+  function toggleHideMine() {
+    setHideMine((v) => !v);
+    setSelectedFiles(new Set());
+  }
 
   // Tick once a second only while an owner-disconnect countdown is active, so
   // the banner's M:SS display stays current without re-rendering otherwise.
@@ -427,33 +477,112 @@ export function Session() {
                 )}
               </div>
             ) : (
-              <ul className="session_file_list">
-                {s.uploads.map((u) => (
-                  <FileRow
-                    key={u.tempId}
-                    entry={u.entry}
-                    uploaderName="you"
-                    isYours
-                    justAdded={false}
-                    onDelete={() => undefined}
-                    progress={u.fraction}
-                    onCancelUpload={u.abort}
-                  />
-                ))}
-                {s.bucket.map((e) => (
-                  <FileRow
-                    key={e.id}
-                    entry={e}
-                    uploaderName={s.nameOf(e.uploader_id)}
-                    isYours={e.uploader_id === s.yourUserId}
-                    canDelete={e.uploader_id === s.yourUserId || s.isOwner}
-                    justAdded={s.justAdded.has(e.id)}
-                    onDownload={s.downloadFile}
-                    onDelete={s.deleteFile}
-                    frozen={s.frozen}
-                  />
-                ))}
-              </ul>
+              <>
+                {s.bucket.length > 0 && (
+                  <div className="session_bucket_toolbar">
+                    <label className="session_bucket_selectall">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={toggleAllFiles}
+                        aria-label="Select all files"
+                        disabled={bucketIds.length === 0}
+                      />
+                      <span>
+                        {selectedCount > 0
+                          ? `${selectedCount} selected`
+                          : `Select all (${bucketIds.length})`}
+                      </span>
+                    </label>
+                    <div className="session_bucket_toolbar_actions">
+                      {ownUploadCount > 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={
+                            hideMine ? (
+                              <RiEyeLine size={16} />
+                            ) : (
+                              <RiEyeOffLine size={16} />
+                            )
+                          }
+                          aria-pressed={hideMine}
+                          aria-label={
+                            hideMine ? "Show my files" : "Hide my files"
+                          }
+                          onClick={toggleHideMine}
+                        ></Button>
+                      )}
+                      {selectedCount > 0 && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<RiDownloadLine size={16} />}
+                            disabled={s.frozen}
+                            aria-label="Download selected files"
+                            onClick={() => {
+                              setZipName(`handover-${cleanSlug}`);
+                              setConfirmDownload(true);
+                            }}
+                          >
+                            Download
+                          </Button>
+                          {s.isOwner && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="session_bucket_delete"
+                              icon={<RiDeleteBin6Line size={16} />}
+                              disabled={s.frozen}
+                              aria-label="Delete selected files"
+                              onClick={() => setConfirmDeleteSelected(true)}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {visibleBucket.length === 0 && s.uploads.length === 0 ? (
+                  <p className="session_bucket_hint">
+                    Your files are hidden. Choose “Show mine” to see them again.
+                  </p>
+                ) : (
+                  <ul className="session_file_list">
+                    {s.uploads.map((u) => (
+                      <FileRow
+                        key={u.tempId}
+                        entry={u.entry}
+                        uploaderName="you"
+                        isYours
+                        justAdded={false}
+                        onDelete={() => undefined}
+                        progress={u.fraction}
+                        onCancelUpload={u.abort}
+                      />
+                    ))}
+                    {visibleBucket.map((e) => (
+                      <FileRow
+                        key={e.id}
+                        entry={e}
+                        uploaderName={s.nameOf(e.uploader_id)}
+                        isYours={e.uploader_id === s.yourUserId}
+                        canDelete={e.uploader_id === s.yourUserId || s.isOwner}
+                        justAdded={s.justAdded.has(e.id)}
+                        onDownload={s.downloadFile}
+                        onDelete={s.deleteFile}
+                        frozen={s.frozen}
+                        selectable
+                        selected={selectedFiles.has(e.id)}
+                        onToggleSelect={toggleFile}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </Panel>
 
@@ -666,6 +795,94 @@ export function Session() {
         }
       >
         This removes every file whose uploader has left the session.
+      </Modal>
+
+      <Modal
+        open={confirmDownload}
+        onClose={() => setConfirmDownload(false)}
+        title={`Download ${selectedCount} file${selectedCount === 1 ? "" : "s"}?`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmDownload(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              icon={<RiDownloadLine size={16} />}
+              disabled={selectedCount === 0}
+              onClick={() => {
+                void s.downloadFilesZip(
+                  selectedEntries,
+                  selectedCount > 1 ? zipName : undefined
+                );
+                setConfirmDownload(false);
+              }}
+            >
+              {selectedCount > 1 ? "Download zip" : "Download"}
+            </Button>
+          </>
+        }
+      >
+        {selectedCount > 1 && (
+          <>
+            <p className="session_download_note">
+              These files will be saved together as a single .zip archive.
+            </p>
+            <div className="session_download_name_field">
+              <Input
+                label="Archive name"
+                value={zipName}
+                onChange={(e) => setZipName(e.target.value)}
+                placeholder={`handover-${cleanSlug}`}
+                aria-label="Zip file name"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <span className="session_download_name_suffix">.zip</span>
+            </div>
+          </>
+        )}
+        <ul className="session_download_list">
+          {selectedEntries.map((e) => (
+            <li key={e.id} className="session_download_item">
+              <span className="session_download_name" title={e.name}>
+                {e.name}
+              </span>
+              <span className="session_download_size">
+                {formatBytes(e.size)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Modal>
+
+      <Modal
+        open={confirmDeleteSelected}
+        onClose={() => setConfirmDeleteSelected(false)}
+        title={`Delete ${selectedCount} selected file${selectedCount === 1 ? "" : "s"}?`}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmDeleteSelected(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                void s.deleteFiles([...selectedFiles]);
+                setSelectedFiles(new Set());
+                setConfirmDeleteSelected(false);
+              }}
+            >
+              Delete {selectedCount} file{selectedCount === 1 ? "" : "s"}
+            </Button>
+          </>
+        }
+      >
+        These files may belong to different members. They will be removed for
+        everyone and cannot be recovered.
       </Modal>
 
       <Modal

@@ -1,11 +1,32 @@
 @use "../styles/mixins" as m;
 
+.incoming_transfer_modal_selectall {
+  display: flex;
+  align-items: center;
+  gap: var(--space_3);
+  font-size: 13px;
+  color: var(--fg_muted);
+  cursor: pointer;
+  padding: var(--space_2) 0;
+  margin-bottom: var(--space_1);
+  border-bottom: 1px solid var(--border);
+
+  input {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+  }
+}
+
 .incoming_transfer_modal_list {
   display: flex;
   flex-direction: column;
-  gap: var(--space_2);
-  max-height: 220px;
+  max-height: 264px;
   overflow-y: auto;
+  // Keep the size column from colliding with the scrollbar when the list
+  // overflows.
+  padding-right: var(--space_2);
   margin-bottom: var(--space_3);
 }
 
@@ -14,7 +35,29 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space_3);
-  font-size: 13px;
+  font-size: 14px;
+  padding: var(--space_3) 0;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+.incoming_transfer_modal_label {
+  display: flex;
+  align-items: center;
+  gap: var(--space_3);
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+
+  input {
+    flex-shrink: 0;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+  }
 }
 
 .incoming_transfer_modal_name {
@@ -26,12 +69,35 @@
   @include m.mono_text;
   color: var(--fg_muted);
   flex-shrink: 0;
+  min-width: 64px;
+  text-align: right;
 }
 
 .incoming_transfer_modal_note {
   font-size: 12px;
   color: var(--fg_muted);
   margin-bottom: var(--space_3);
+}
+
+.incoming_transfer_modal_zipname {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space_2);
+  margin-bottom: var(--space_3);
+
+  .input_field {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.incoming_transfer_modal_zipname_suffix {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  font-size: 14px;
+  color: var(--fg_muted);
+  white-space: nowrap;
 }
 
 .incoming_transfer_modal_warn {

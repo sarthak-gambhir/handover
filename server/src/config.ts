@@ -42,11 +42,13 @@ export const config = {
   // Ownership offer TTL (ms) — an unaccepted offer expires after this.
   ownerOfferTtlMs: 60 * 1000,
 
-  // Signaling per-state timeouts (ms)
+  // Signaling per-state timeouts (ms). Generous on `requested` so a recipient
+  // juggling several queued prompts (or just away from the keyboard) isn't cut
+  // off; `offering` allows for slower ICE gathering on real networks.
   transferTimeouts: {
-    requested: 30 * 1000,
-    accepted: 60 * 1000,
-    offering: 30 * 1000,
+    requested: 120 * 1000,
+    accepted: 120 * 1000,
+    offering: 60 * 1000,
   } as Record<string, number>,
   transferGcMs: 5 * 60 * 1000, // GC terminal transfers older than 5 min
 

@@ -1,4 +1,3 @@
-import brandIcon from "../../../public/brand.svg";
 import "./BrandMark.scss";
 
 interface BrandMarkProps {
@@ -14,7 +13,7 @@ export function BrandMark({ size = 22, className }: BrandMarkProps) {
       className={`brand_mark ${className}`}
       style={{ width: size, height: size }}
     >
-      <img src={brandIcon} alt="HandOver" />
+      <img src={"/brand.svg"} alt="HandOver" />
     </div>
   );
 }

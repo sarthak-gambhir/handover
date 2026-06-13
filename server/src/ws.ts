@@ -214,7 +214,7 @@ export function registerWs(io: Server): void {
     );
     socket.on(
       "transfer:response",
-      (p: { transfer_id?: string; accepted?: boolean }) =>
+      (p: { transfer_id?: string; accepted?: boolean; selected?: number[] }) =>
         handleTransferResponse(io, socket, p)
     );
     socket.on("webrtc:offer", (p: { transfer_id?: string; sdp?: unknown }) =>
@@ -856,7 +856,7 @@ function otherPeer(transfer: TransferState, user_id: string): string {
 function handleTransferResponse(
   io: Server,
   socket: AppSocket,
-  p: { transfer_id?: string; accepted?: boolean }
+  p: { transfer_id?: string; accepted?: boolean; selected?: number[] }
 ): void {
   if (frozenBlocked(socket)) return;
   const r = authorizeSignaling(socket, p.transfer_id, {
@@ -866,8 +866,25 @@ function handleTransferResponse(
   if (!r) return;
   const { session, transfer } = r;
   const accepted = Boolean(p.accepted);
+  // The receiver may accept a subset of the offered files. Sanitize the indices
+  // against the offered file count: keep unique, in-range integers in order.
+  let selected: number[] | undefined;
+  if (accepted && Array.isArray(p.selected)) {
+    const seen = new Set<number>();
+    for (const i of p.selected) {
+      if (Number.isInteger(i) && i >= 0 && i < transfer.files.length) {
+        seen.add(i);
+      }
+    }
+    selected = [...seen].sort((a, b) => a - b);
+  }
   const from: TransferStateName = transfer.state;
   store.setTransferState(transfer, accepted ? "accepted" : "declined");
+  // Narrow the server-side file record to the accepted subset for accurate
+  // metadata/logging (does not affect the bytes, which flow peer-to-peer).
+  if (accepted && selected && selected.length > 0) {
+    transfer.files = selected.map((i) => transfer.files[i]);
+  }
   logTransfer(session, transfer, from);
   emitTo(
     io,
@@ -877,6 +894,7 @@ function handleTransferResponse(
       transfer_id: transfer.transfer_id,
       to_user_id: transfer.to_user_id,
       accepted,
+      ...(selected ? { selected } : {}),
     }
   );
 }
