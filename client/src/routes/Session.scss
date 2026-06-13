@@ -386,6 +386,10 @@
   align-items: center;
   gap: var(--space_1);
 
+  .session_bucket_hint_eye.active {
+    color: var(--accent);
+  }
+
   // On small screens collapse the action buttons to just their icons; the
   // accessible names live on aria-label so they stay reachable.
   .button_label {
@@ -402,10 +406,19 @@
 }
 
 .session_bucket_hint {
-  padding: var(--space_4) 0;
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  gap: var(--space_3);
+  padding-bottom: var(--space_4);
   text-align: center;
   font-size: 13px;
   color: var(--fg_muted);
+
+  .session_bucket_hint_eye {
+    cursor: pointer;
+    color: var(--accent);
+  }
 }
 
 // Bulk-download confirmation file list.

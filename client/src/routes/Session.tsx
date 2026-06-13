@@ -510,8 +510,12 @@ export function Session() {
                           aria-label={
                             hideMine ? "Show my files" : "Hide my files"
                           }
+                          className={hideMine ? "active" : undefined}
+                          title={hideMine ? "Show my files" : "Hide my files"}
                           onClick={toggleHideMine}
-                        ></Button>
+                        >
+                          {hideMine ? "Show my files" : "Hide my files"}
+                        </Button>
                       )}
                       {selectedCount > 0 && (
                         <>
@@ -521,6 +525,7 @@ export function Session() {
                             icon={<RiDownloadLine size={16} />}
                             disabled={s.frozen}
                             aria-label="Download selected files"
+                            title="Download selected files"
                             onClick={() => {
                               setZipName(`handover-${cleanSlug}`);
                               setConfirmDownload(true);
@@ -536,6 +541,7 @@ export function Session() {
                               icon={<RiDeleteBin6Line size={16} />}
                               disabled={s.frozen}
                               aria-label="Delete selected files"
+                              title="Delete selected files"
                               onClick={() => setConfirmDeleteSelected(true)}
                             >
                               Delete
@@ -546,11 +552,8 @@ export function Session() {
                     </div>
                   </div>
                 )}
-                {visibleBucket.length === 0 && s.uploads.length === 0 ? (
-                  <p className="session_bucket_hint">
-                    Your files are hidden. Choose “Show mine” to see them again.
-                  </p>
-                ) : (
+
+                {(visibleBucket.length > 0 || s.uploads.length > 0) && (
                   <ul className="session_file_list">
                     {s.uploads.map((u) => (
                       <FileRow
@@ -564,6 +567,19 @@ export function Session() {
                         onCancelUpload={u.abort}
                       />
                     ))}
+
+                    {hideMine && (
+                      <p className="session_bucket_hint">
+                        <span>Your files are hidden. Click</span>
+                        <RiEyeLine
+                          size={16}
+                          onClick={toggleHideMine}
+                          title="Show my files"
+                          className="session_bucket_hint_eye"
+                        />
+                        <span>to see them again.</span>
+                      </p>
+                    )}
                     {visibleBucket.map((e) => (
                       <FileRow
                         key={e.id}
