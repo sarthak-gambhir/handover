@@ -69,6 +69,10 @@ export function useSession(slug: string) {
   const [keyReady, setKeyReady] = useState(!e2ee.e2eeSupported);
 
   const socketRef = useRef<AppSocket | null>(null);
+  // Mirror of `members` for the long-lived socket handlers (registered once in
+  // the [slug] effect): reading `members` there would capture the stale initial
+  // closure, so a transfer:request would resolve the sender to "Member".
+  const membersRef = useRef<PublicMember[]>([]);
   const contentKeyRef = useRef<CryptoKey | null>(null);
   const keyRetryRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const keyBootstrapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -131,10 +135,23 @@ export function useSession(slug: string) {
     [frozen, rawDeleteFile, toast]
   );
 
+  useEffect(() => {
+    membersRef.current = members;
+  }, [members]);
+
   const nameOf = useCallback(
     (uid: string) =>
       members.find((m) => m.user_id === uid)?.display_name ?? "Member",
     [members]
+  );
+
+  // Stable name resolver that reads the latest members via ref — safe to call
+  // from socket handlers without going stale.
+  const nameOfRef = useCallback(
+    (uid: string) =>
+      membersRef.current.find((m) => m.user_id === uid)?.display_name ??
+      "Member",
+    []
   );
 
   // ---- transfer VM helpers ----
@@ -506,7 +523,7 @@ export function useSession(slug: string) {
               {
                 transfer_id: p.transfer_id,
                 from_user_id: p.from_user_id,
-                from_name: nameOf(p.from_user_id),
+                from_name: nameOfRef(p.from_user_id),
                 files: p.files,
               },
             ]
