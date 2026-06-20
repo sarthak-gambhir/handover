@@ -35,6 +35,9 @@ export const config = {
   // Knock queue
   knockQueueCap: 50,
 
+  // Per-session activity log: max retained entries (ring buffer; oldest dropped).
+  activityCap: intEnv("ACTIVITY_CAP", 300),
+
   // Invite links
   inviteTtlMs: 30 * 60 * 1000, // 30 min single-use invite TTL
   inviteCap: intEnv("INVITE_CAP", 10), // max live invites per session

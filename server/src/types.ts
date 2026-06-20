@@ -72,6 +72,42 @@ export type TransferState = {
   state_log: Array<{ state: TransferStateName; at: number }>;
 };
 
+// ---- activity log ----------------------------------------------------------
+
+export type ActivityType =
+  | "upload"
+  | "download"
+  | "delete"
+  | "transfer"
+  | "join"
+  | "leave"
+  | "kick"
+  | "block"
+  | "unblock"
+  | "restrict"
+  | "unrestrict"
+  | "report";
+
+// Outcome of a P2P transfer activity entry (only set when type === "transfer").
+export type ActivityOutcome = "complete" | "declined" | "cancelled" | "failed";
+
+// A single audited event. Names are snapshotted at record time so entries stay
+// readable after a member leaves. `files`/`total_bytes` describe file payloads
+// (upload/download/delete/transfer); `count` is used for bulk deletes.
+export type ActivityEntry = {
+  id: string; // random 16-byte hex
+  at: number;
+  type: ActivityType;
+  actor_user_id: string;
+  actor_name: string;
+  target_user_id?: string;
+  target_name?: string;
+  files?: { name: string; size: number }[];
+  count?: number;
+  total_bytes?: number;
+  outcome?: ActivityOutcome;
+};
+
 export type Session = {
   slug: string; // canonical lowercase, "purple-otter-77"
   owner_user_id: string;
@@ -86,6 +122,9 @@ export type Session = {
   blocked_user_ids: Set<string>;
   // Member reports queue, visible only to the owner. Keyed by reported user_id.
   reports: Map<string, Report>;
+  // In-memory audit log (ring buffer capped at config.activityCap). Cleared
+  // with the session; never persisted.
+  activity: ActivityEntry[];
   total_bytes: number;
   last_activity: number;
   owner_disconnected_at: number | null; // for owner grace

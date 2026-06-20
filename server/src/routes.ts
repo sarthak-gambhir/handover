@@ -17,7 +17,7 @@ import {
   setSessionCookie,
   clearSessionCookie,
 } from "./auth.js";
-import { emitToSession, emitToOwner } from "./realtime.js";
+import { emitToSession, emitToOwner, emitActivity } from "./realtime.js";
 import { iceServers } from "./ice.js";
 import type { Session } from "./types.js";
 
@@ -319,6 +319,12 @@ router.post(
       user_id: redeemed.member.user_id,
       display_name: redeemed.member.display_name,
     });
+    const joinEntry = store.recordActivity(session, {
+      type: "join",
+      actor_user_id: redeemed.member.user_id,
+      actor_name: redeemed.member.display_name,
+    });
+    emitActivity(session, joinEntry);
     res.status(200).json({
       slug: session.slug,
       owner_user_id: session.owner_user_id,
@@ -340,6 +346,7 @@ router.get("/sessions/:slug", requireMember, (req: Request, res: Response) => {
     you: store.publicMember(req.member!),
     members: store.publicMembers(session),
     bucket: store.publicBucket(session),
+    activity: store.activityFor(session, req.user_id!),
   });
 });
 
@@ -412,6 +419,14 @@ router.post(
 
     const pub = store.publicBucketEntry(entry);
     emitToSession(session.slug, "file:added", { entry: pub });
+    const uploadEntry = store.recordActivity(session, {
+      type: "upload",
+      actor_user_id: req.user_id!,
+      actor_name: req.member!.display_name,
+      files: [{ name: entry.name, size: entry.size }],
+      total_bytes: entry.size,
+    });
+    emitActivity(session, uploadEntry);
     res.status(201).json(pub);
   }
 );
@@ -436,6 +451,14 @@ router.get(
       "Content-Disposition",
       `attachment; filename="${entry.name}"`
     );
+    const downloadEntry = store.recordActivity(session, {
+      type: "download",
+      actor_user_id: req.user_id!,
+      actor_name: req.member!.display_name,
+      files: [{ name: entry.name, size: entry.size }],
+      total_bytes: entry.size,
+    });
+    emitActivity(session, downloadEntry);
     res.send(entry.data);
   }
 );
@@ -461,6 +484,14 @@ router.delete(
     }
     store.removeBucketEntry(session, req.params.id);
     emitToSession(session.slug, "file:removed", { id: req.params.id });
+    const deleteEntry = store.recordActivity(session, {
+      type: "delete",
+      actor_user_id: req.user_id!,
+      actor_name: req.member!.display_name,
+      files: [{ name: entry.name, size: entry.size }],
+      total_bytes: entry.size,
+    });
+    emitActivity(session, deleteEntry);
     res.status(204).end();
   }
 );
@@ -475,6 +506,15 @@ router.delete(
     const session = req.session!;
     const ids = store.removeOrphanedFiles(session);
     for (const id of ids) emitToSession(session.slug, "file:removed", { id });
+    if (ids.length > 0) {
+      const entry = store.recordActivity(session, {
+        type: "delete",
+        actor_user_id: req.user_id!,
+        actor_name: req.member!.display_name,
+        count: ids.length,
+      });
+      emitActivity(session, entry);
+    }
     res.json({ removed: ids.length });
   }
 );
@@ -489,6 +529,18 @@ router.delete(
     const session = req.session!;
     const ids = store.removeFilesByUploader(session, req.params.userId);
     for (const id of ids) emitToSession(session.slug, "file:removed", { id });
+    if (ids.length > 0) {
+      const target = session.members.get(req.params.userId);
+      const entry = store.recordActivity(session, {
+        type: "delete",
+        actor_user_id: req.user_id!,
+        actor_name: req.member!.display_name,
+        target_user_id: req.params.userId,
+        target_name: target?.display_name ?? "Former member",
+        count: ids.length,
+      });
+      emitActivity(session, entry);
+    }
     res.json({ removed: ids.length });
   }
 );

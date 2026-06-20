@@ -31,6 +31,8 @@
 
 .transfer_progress_row_name {
   @include m.truncate;
+  flex: 1;
+  min-width: 0;
   font-size: 13px;
   color: var(--fg);
 }
@@ -56,13 +58,19 @@
 
 .transfer_progress_row_meta {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
+  // Wrap as whole units (label vs stats) with spacing, instead of breaking the
+  // stats apart mid-string in the narrow rail.
+  flex-wrap: wrap;
+  gap: var(--space_1) var(--space_2);
   font-size: 11px;
   color: var(--fg_muted);
 }
 
 .transfer_progress_row_stats {
   @include m.mono_text;
+  white-space: nowrap;
 }
 
 .transfer_progress_row_actions {

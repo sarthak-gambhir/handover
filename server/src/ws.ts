@@ -3,7 +3,7 @@ import { parse as parseCookie } from "cookie";
 import { store } from "./sessions.js";
 import { normalizeSlug } from "./slug.js";
 import { config } from "./config.js";
-import { room } from "./realtime.js";
+import { room, emitActivity } from "./realtime.js";
 import { cookieName } from "./auth.js";
 import {
   type Session,
@@ -11,6 +11,7 @@ import {
   type TransferState,
   type TransferStateName,
   type TransferFileMeta,
+  type ActivityOutcome,
   TERMINAL_STATES,
 } from "./types.js";
 
@@ -111,6 +112,27 @@ function logTransfer(
 
 function memberByUserId(session: Session, user_id: string): Member | undefined {
   return session.members.get(user_id);
+}
+
+/** Record + broadcast a terminal P2P transfer as an activity entry. */
+function recordTransferActivity(
+  session: Session,
+  transfer: TransferState,
+  outcome: ActivityOutcome
+): void {
+  const from = memberByUserId(session, transfer.from_user_id);
+  const to = memberByUserId(session, transfer.to_user_id);
+  const entry = store.recordActivity(session, {
+    type: "transfer",
+    actor_user_id: transfer.from_user_id,
+    actor_name: from?.display_name ?? "Former member",
+    target_user_id: transfer.to_user_id,
+    target_name: to?.display_name ?? "Former member",
+    files: transfer.files.map((f) => ({ name: f.name, size: f.size })),
+    total_bytes: transfer.files.reduce((n, f) => n + (f.size || 0), 0),
+    outcome,
+  });
+  emitActivity(session, entry);
 }
 
 function emitTo(
@@ -409,6 +431,7 @@ function handleIdentify(
     your_restricted: [...member.restricted_user_ids],
     // Only the owner moderates, so the reports queue is owner-only.
     reports: member.is_owner ? store.publicReports(session) : [],
+    activity: store.activityFor(session, member.user_id),
   });
   io.to(room(slug)).emit("member:online", { user_id: member.user_id });
   broadcastMembers(io, session);
@@ -531,6 +554,12 @@ function handleAdmit(
   broadcastMembers(io, session);
   // Clear the resolved knock from the owner's queue.
   emitTo(io, ctx.owner, "knock:cancelled", { knock_id: p.knock_id });
+  const joinEntry = store.recordActivity(session, {
+    type: "join",
+    actor_user_id: member.user_id,
+    actor_name: member.display_name,
+  });
+  emitActivity(session, joinEntry);
 }
 
 function handleReject(
@@ -576,6 +605,7 @@ function handleKick(
   }
 
   const targetSocketId = target.socket_id;
+  const targetName = target.display_name;
 
   // Collect this member's bucket file ids before removal.
   const fileIds = [...session.bucket.values()]
@@ -606,6 +636,14 @@ function handleKick(
   broadcastMembers(io, session);
   // The kicked member is dropped from the reports queue (as target/reporter).
   emitReports(io, session);
+  const kickEntry = store.recordActivity(session, {
+    type: "kick",
+    actor_user_id: ctx.owner.user_id,
+    actor_name: ctx.owner.display_name,
+    target_user_id: p.user_id,
+    target_name: targetName,
+  });
+  emitActivity(session, kickEntry);
 }
 
 // ---- moderation: restrict / report / block --------------------------------
@@ -671,6 +709,15 @@ function handleRestrict(
     member.restricted_user_ids.delete(p.user_id);
   }
   emitRestrictList(socket, member);
+  const target = session.members.get(p.user_id);
+  const restrictEntry = store.recordActivity(session, {
+    type: restrict ? "restrict" : "unrestrict",
+    actor_user_id: member.user_id,
+    actor_name: member.display_name,
+    target_user_id: p.user_id,
+    target_name: target?.display_name ?? "Member",
+  });
+  emitActivity(session, restrictEntry);
 }
 
 // Any member may report another. Reporting auto-restricts the target for the
@@ -709,6 +756,14 @@ function handleReport(
   );
   emitRestrictList(socket, member);
   emitReports(io, session);
+  const reportEntry = store.recordActivity(session, {
+    type: "report",
+    actor_user_id: member.user_id,
+    actor_name: member.display_name,
+    target_user_id: p.user_id,
+    target_name: target.display_name,
+  });
+  emitActivity(session, reportEntry);
 }
 
 // Owner-only: block bars a member from P2P-sending to anyone and from bucket
@@ -757,6 +812,14 @@ function handleBlock(
   }
   store.touch(session);
   broadcastMembers(io, session);
+  const blockEntry = store.recordActivity(session, {
+    type: blocked ? "block" : "unblock",
+    actor_user_id: ctx.owner.user_id,
+    actor_name: ctx.owner.display_name,
+    target_user_id: p.user_id,
+    target_name: target.display_name,
+  });
+  emitActivity(session, blockEntry);
 }
 
 // Owner-only: dismiss ("ignore") a reported member. The reporter's personal
@@ -1147,6 +1210,7 @@ function handleTransferResponse(
       ...(selected ? { selected } : {}),
     }
   );
+  if (!accepted) recordTransferActivity(session, transfer, "declined");
 }
 
 function handleOffer(
@@ -1259,6 +1323,7 @@ function handleTransferCancel(
       reason: p.reason ?? "cancelled",
     }
   );
+  recordTransferActivity(session, transfer, "cancelled");
 }
 
 function handleTransferComplete(
@@ -1284,6 +1349,7 @@ function handleTransferComplete(
       transfer_id: transfer.transfer_id,
     }
   );
+  recordTransferActivity(session, transfer, "complete");
 }
 
 // ---- leave / disconnect ----------------------------------------------------
@@ -1321,12 +1387,20 @@ function handleLeave(io: Server, socket: AppSocket, ack?: () => void): void {
     return;
   }
   cancelPeerTransfers(io, session, data.user_id);
+  const leaverName =
+    session.members.get(data.user_id)?.display_name ?? "Member";
   // Keep the leaver's uploaded files in the bucket (orphaned); the owner can
   // remove them later. Their token is still revoked so access ends immediately.
   store.removeMember(session, data.user_id, false);
   forgetTransferRate(data.user_id);
   io.to(room(session.slug)).emit("member:left", { user_id: data.user_id });
   broadcastMembers(io, session);
+  const leaveEntry = store.recordActivity(session, {
+    type: "leave",
+    actor_user_id: data.user_id,
+    actor_name: leaverName,
+  });
+  emitActivity(session, leaveEntry);
   // A departing member is pruned from the reports queue (as target/reporter).
   emitReports(io, session);
   socket.leave(room(session.slug));

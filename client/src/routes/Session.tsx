@@ -45,6 +45,8 @@ import { InviteModal } from "../components/InviteModal";
 import { SendFileModal } from "../components/SendFileModal";
 import { IncomingTransferModal } from "../components/IncomingTransferModal";
 import { TransferProgressRow } from "../components/TransferProgressRow";
+import { ActivityRow } from "../components/ActivityRow";
+import { isTerminal } from "../lib/transfer_types";
 import { sessionStore } from "../lib/sessionStore";
 import { normalizeSlug } from "../lib/slug";
 import type { PublicMember } from "../lib/api";
@@ -245,6 +247,9 @@ export function Session() {
 
   const onlineCount = s.members.filter((m) => m.online).length;
   const filesEmpty = s.bucket.length === 0 && s.uploads.length === 0;
+  // In-progress transfers keep their live progress row; terminal ones are
+  // represented in the activity log instead.
+  const liveTransfers = s.transfers.filter((t) => !isTerminal(t.status));
 
   // Owner-disconnect countdown: shown to remaining members while the owner is
   // offline. The server ends the session at this deadline, so the M:SS we show
@@ -769,21 +774,32 @@ export function Session() {
               className="session_pane session_pane_activity"
               title="Activity"
               icon={<RiArrowLeftRightLine size={20} />}
-              count={s.transfers.length || undefined}
+              count={s.activity.length || undefined}
             >
-              {s.transfers.length === 0 ? (
-                <p className="session_empty_text">No transfers yet.</p>
+              {liveTransfers.length === 0 && s.activity.length === 0 ? (
+                <p className="session_empty_text">No activity yet.</p>
               ) : (
-                <ul className="session_transfer_list">
-                  {s.transfers.map((t) => (
-                    <TransferProgressRow
-                      key={t.key}
-                      transfer={t}
-                      onCancel={s.cancelTransfer}
-                      onDismiss={s.dismissTransfer}
-                    />
-                  ))}
-                </ul>
+                <>
+                  {liveTransfers.length > 0 && (
+                    <ul className="session_transfer_list">
+                      {liveTransfers.map((t) => (
+                        <TransferProgressRow
+                          key={t.key}
+                          transfer={t}
+                          onCancel={s.cancelTransfer}
+                          onDismiss={s.dismissTransfer}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                  {s.activity.length > 0 && (
+                    <ul className="session_activity_list">
+                      {s.activity.map((entry) => (
+                        <ActivityRow key={entry.id} entry={entry} />
+                      ))}
+                    </ul>
+                  )}
+                </>
               )}
             </Panel>
           </div>

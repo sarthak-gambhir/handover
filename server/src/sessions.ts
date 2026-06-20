@@ -13,6 +13,7 @@ import {
   type PublicMember,
   type PublicBucketEntry,
   type PublicReport,
+  type ActivityEntry,
   TERMINAL_STATES,
 } from "./types.js";
 import { normalizeSlug, makeUniqueSlug } from "./slug.js";
@@ -23,6 +24,34 @@ function newToken(): string {
 
 function newId(): string {
   return randomBytes(16).toString("hex");
+}
+
+// Activity-log visibility. The owner audits everything; otherwise an entry is
+// visible when it is "public" or the viewer is its actor/target. `report` is a
+// special case: only the owner and the reporter (actor) see it — never the
+// reported member (target).
+const PUBLIC_ACTIVITY: ReadonlySet<ActivityEntry["type"]> = new Set([
+  "upload",
+  "delete",
+  "join",
+  "leave",
+  "kick",
+  "block",
+  "unblock",
+]);
+
+export function canSeeActivity(
+  entry: ActivityEntry,
+  viewerId: string,
+  ownerId: string
+): boolean {
+  if (viewerId === ownerId) return true;
+  if (PUBLIC_ACTIVITY.has(entry.type)) return true;
+  if (entry.type === "report") return entry.actor_user_id === viewerId;
+  // download, transfer, restrict, unrestrict: actor or target only.
+  return (
+    entry.actor_user_id === viewerId || entry.target_user_id === viewerId
+  );
 }
 
 export type TokenEntry =
@@ -96,6 +125,7 @@ export class Store extends EventEmitter {
       transfers: new Map(),
       blocked_user_ids: new Set(),
       reports: new Map(),
+      activity: [],
       total_bytes: 0,
       last_activity: now,
       owner_disconnected_at: null,
@@ -599,6 +629,32 @@ export class Store extends EventEmitter {
     }
     out.sort((a, b) => (b.reporters[0]?.at ?? 0) - (a.reporters[0]?.at ?? 0));
     return out;
+  }
+
+  // ---- activity log ------------------------------------------------------
+
+  /**
+   * Append an audit entry (id/at filled in here) and trim the ring buffer to
+   * `config.activityCap`. Returns the stored entry so callers can broadcast it.
+   */
+  recordActivity(
+    session: Session,
+    partial: Omit<ActivityEntry, "id" | "at">
+  ): ActivityEntry {
+    const entry: ActivityEntry = { ...partial, id: newId(), at: Date.now() };
+    session.activity.push(entry);
+    const overflow = session.activity.length - config.activityCap;
+    if (overflow > 0) session.activity.splice(0, overflow);
+    this.touch(session);
+    return entry;
+  }
+
+  /** Entries visible to `viewerId`, newest first. */
+  activityFor(session: Session, viewerId: string): ActivityEntry[] {
+    return session.activity
+      .filter((e) => canSeeActivity(e, viewerId, session.owner_user_id))
+      .slice()
+      .reverse();
   }
 
   memberCount(): number {

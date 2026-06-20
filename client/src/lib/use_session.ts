@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { PublicMember, PublicBucketEntry, PublicReport } from "./api";
+import type {
+  PublicMember,
+  PublicBucketEntry,
+  PublicReport,
+  ActivityEntry,
+} from "./api";
 import { createSocket, type AppSocket, type TransferFileMeta } from "./socket";
 import { sessionStore } from "./sessionStore";
 import { useToast } from "../components/ui/Toast";
@@ -53,6 +58,9 @@ export function useSession(slug: string) {
     new Set()
   );
   const [reports, setReports] = useState<PublicReport[]>([]);
+  // Session activity log, projected by the server for this viewer (owner sees
+  // all; others see public events plus their own). Newest first.
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
   // Absolute local time when the owner-disconnect grace expires (session ends),
   // or null when the owner is present. Drives the countdown banner.
   const [ownerGraceEndsAt, setOwnerGraceEndsAt] = useState<number | null>(null);
@@ -405,6 +413,7 @@ export function useSession(slug: string) {
       setBucket(p.bucket);
       setRestrictedUserIds(new Set(p.your_restricted));
       setReports(p.reports);
+      setActivity(p.activity);
       setOwnerGraceEndsAt(
         p.owner_grace_ms != null ? Date.now() + p.owner_grace_ms : null
       );
@@ -483,6 +492,9 @@ export function useSession(slug: string) {
       setRestrictedUserIds(new Set(p.restricted_user_ids))
     );
     socket.on("reports:list", (p) => setReports(p.reports));
+    socket.on("activity:new", (p) =>
+      setActivity((prev) => [p.entry, ...prev].slice(0, 300))
+    );
     socket.on("invite:used", (p) => {
       setInviteUsed({ code: p.code, at: Date.now() });
       toast(`${p.display_name} joined via an invite link.`, "info");
@@ -1157,6 +1169,7 @@ export function useSession(slug: string) {
     youBlocked,
     restrictedUserIds,
     reports,
+    activity,
     uploads,
     transfers,
     incoming,

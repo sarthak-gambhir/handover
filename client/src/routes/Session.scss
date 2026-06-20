@@ -161,6 +161,20 @@
   list-style: none;
 }
 
+.session_activity_list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+// When both live transfers and the log show, separate them a little.
+.session_transfer_list + .session_activity_list {
+  margin-top: var(--space_2);
+}
+
 .session_transfer_pick {
   display: flex;
   align-items: center;

@@ -29,6 +29,36 @@ export interface PublicBucketEntry {
   created_at: number;
 }
 
+export type ActivityType =
+  | "upload"
+  | "download"
+  | "delete"
+  | "transfer"
+  | "join"
+  | "leave"
+  | "kick"
+  | "block"
+  | "unblock"
+  | "restrict"
+  | "unrestrict"
+  | "report";
+
+export type ActivityOutcome = "complete" | "declined" | "cancelled" | "failed";
+
+export interface ActivityEntry {
+  id: string;
+  at: number;
+  type: ActivityType;
+  actor_user_id: string;
+  actor_name: string;
+  target_user_id?: string;
+  target_name?: string;
+  files?: { name: string; size: number }[];
+  count?: number;
+  total_bytes?: number;
+  outcome?: ActivityOutcome;
+}
+
 export interface InviteSummary {
   code: string;
   created_at: number;
@@ -44,6 +74,7 @@ export interface Snapshot {
   you: PublicMember;
   members: PublicMember[];
   bucket: PublicBucketEntry[];
+  activity: ActivityEntry[];
 }
 
 export class ApiError extends Error {

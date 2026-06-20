@@ -1,5 +1,10 @@
 import { io, type Socket } from "socket.io-client";
-import type { PublicMember, PublicBucketEntry, PublicReport } from "./api";
+import type {
+  PublicMember,
+  PublicBucketEntry,
+  PublicReport,
+  ActivityEntry,
+} from "./api";
 
 export interface TransferFileMeta {
   name: string;
@@ -21,6 +26,8 @@ export interface ServerToClient {
     your_restricted: string[];
     // Reports queue; populated only when the caller is the owner.
     reports: PublicReport[];
+    // Activity log projected for this viewer (owner sees all; else public + own).
+    activity: ActivityEntry[];
   }) => void;
   "members:list": (p: { members: PublicMember[] }) => void;
   "member:joined": (p: { member: PublicMember }) => void;
@@ -99,6 +106,8 @@ export interface ServerToClient {
   // Moderation. The caller's own restrict list, and the owner-only reports queue.
   "member:restricted": (p: { restricted_user_ids: string[] }) => void;
   "reports:list": (p: { reports: PublicReport[] }) => void;
+  // A new activity-log entry the server has decided this client may see.
+  "activity:new": (p: { entry: ActivityEntry }) => void;
   // E2EE key exchange (server relays only; never sees the content key).
   "e2ee:request_key": (p: { from_user_id: string; pubkey: string }) => void;
   "e2ee:key": (p: {

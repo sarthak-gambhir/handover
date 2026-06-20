@@ -170,6 +170,11 @@ export class SenderConnection {
     this.dc.onmessage = (ev) => this.onControl(ev.data);
     this.dc.onerror = () =>
       this.fail("datachannel_error", "Transfer interrupted");
+    // A clean remote close (receiver left / reloaded) fires no error event, so
+    // without this the next send into the closed channel would throw. fail()
+    // no-ops once we've completed, so normal post-transfer teardown is safe.
+    this.dc.onclose = () =>
+      this.fail("datachannel_closed", "Transfer interrupted — the connection closed.");
   }
 
   /** Receiver -> sender control channel. Currently only the `ready` ack. */
@@ -265,7 +270,16 @@ export class SenderConnection {
         mime: f.type || "application/octet-stream",
       })),
     };
-    this.dc.send(JSON.stringify(manifest));
+    if (this.cancelled || this.dc.readyState !== "open") return;
+    try {
+      this.dc.send(JSON.stringify(manifest));
+    } catch {
+      this.fail(
+        "datachannel_closed",
+        "Transfer interrupted — the connection closed."
+      );
+      return;
+    }
 
     // Wait for the receiver to confirm its sinks are ready before streaming
     // bytes. Without this the receiver can drop early chunks while it is still
@@ -293,7 +307,18 @@ export class SenderConnection {
         frame[0] = index;
         frame[1] = isLast ? FLAG_LAST : 0;
         frame.set(new Uint8Array(buf), 2);
-        this.dc.send(frame);
+        // The channel can close during the awaits above (receiver left); sending
+        // into a non-open channel throws. Bail cleanly instead.
+        if (this.cancelled || this.dc.readyState !== "open") return;
+        try {
+          this.dc.send(frame);
+        } catch {
+          this.fail(
+            "datachannel_closed",
+            "Transfer interrupted — the connection closed."
+          );
+          return;
+        }
         offset = end;
         this.sent += buf.byteLength;
         this.cb.onProgress({
@@ -312,8 +337,16 @@ export class SenderConnection {
         }
       }
     }
-    if (this.cancelled) return;
-    this.dc.send(JSON.stringify({ type: "done" }));
+    if (this.cancelled || this.dc.readyState !== "open") return;
+    try {
+      this.dc.send(JSON.stringify({ type: "done" }));
+    } catch {
+      this.fail(
+        "datachannel_closed",
+        "Transfer interrupted — the connection closed."
+      );
+      return;
+    }
 
     // Wait for the receiver to confirm every file landed before tearing down.
     // ICE monitoring stays active during this wait so a genuine mid-transfer

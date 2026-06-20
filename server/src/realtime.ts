@@ -1,5 +1,6 @@
 import type { Server } from "socket.io";
-import type { Session } from "./types.js";
+import type { Session, ActivityEntry } from "./types.js";
+import { canSeeActivity } from "./sessions.js";
 
 let io: Server | null = null;
 
@@ -35,4 +36,17 @@ export function emitToOwner(
 ): void {
   const owner = session.members.get(session.owner_user_id);
   if (owner?.socket_id) emitToSocket(owner.socket_id, event, payload);
+}
+
+/**
+ * Broadcast a new activity entry to exactly the members allowed to see it: the
+ * owner always, plus any member for whom `canSeeActivity` holds (actor/target,
+ * or everyone for public entries). Offline members pick it up via the snapshot.
+ */
+export function emitActivity(session: Session, entry: ActivityEntry): void {
+  for (const member of session.members.values()) {
+    if (!member.socket_id) continue;
+    if (!canSeeActivity(entry, member.user_id, session.owner_user_id)) continue;
+    emitToSocket(member.socket_id, "activity:new", { entry });
+  }
 }
