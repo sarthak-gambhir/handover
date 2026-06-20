@@ -1,5 +1,6 @@
 import { RiDownloadLine, RiUploadLine, RiCloseLine } from "react-icons/ri";
 import { Button } from "./ui/Button";
+import { Tooltip } from "./ui/Tooltip";
 import type { TransferVM } from "../lib/transfer_types";
 import { isTerminal } from "../lib/transfer_types";
 import { formatRate, formatEta } from "../lib/format";
@@ -47,9 +48,9 @@ export function TransferProgressRow({
       </span>
       <div className="transfer_progress_row_main">
         <div className="transfer_progress_row_head">
-          <span className="transfer_progress_row_name" title={label}>
-            {label}
-          </span>
+          <Tooltip label={label} whenOverflowing>
+            <span className="transfer_progress_row_name">{label}</span>
+          </Tooltip>
           <span className="transfer_progress_row_peer">
             {transfer.role === "sender" ? "to" : "from"} {transfer.peer_name}
           </span>
@@ -84,13 +85,15 @@ export function TransferProgressRow({
       </div>
       <div className="transfer_progress_row_actions">
         {terminal ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<RiCloseLine size={16} />}
-            aria-label="Dismiss"
-            onClick={() => onDismiss(transfer)}
-          />
+          <Tooltip label="Dismiss" placement="top">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<RiCloseLine size={16} />}
+              aria-label="Dismiss"
+              onClick={() => onDismiss(transfer)}
+            />
+          </Tooltip>
         ) : (
           <Button size="sm" variant="ghost" onClick={() => onCancel(transfer)}>
             Cancel

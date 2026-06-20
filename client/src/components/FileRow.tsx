@@ -1,6 +1,7 @@
 import { RiDownloadLine, RiDeleteBin6Line } from "react-icons/ri";
 import { Badge } from "./ui/Badge";
 import { Button } from "./ui/Button";
+import { Tooltip } from "./ui/Tooltip";
 import type { PublicBucketEntry } from "../lib/api";
 import { formatBytes, relativeTime } from "../lib/format";
 import { cx } from "../lib/cx";
@@ -71,9 +72,9 @@ export function FileRow({
         className="file_row_info"
         onClick={selectable ? () => onToggleSelect?.(entry.id) : undefined}
       >
-        <span className="file_row_name" title={entry.name}>
-          {entry.name}
-        </span>
+        <Tooltip label={entry.name} whenOverflowing>
+          <span className="file_row_name">{entry.name}</span>
+        </Tooltip>
 
         <div className="file_row_meta">
           <span className="file_row_size">{formatBytes(entry.size)}</span>
@@ -119,31 +120,35 @@ export function FileRow({
           </Button>
         ) : (
           <>
-            <button
-              type="button"
-              className={cx(
-                "file_row_download",
-                frozen && "file_row_download_disabled"
-              )}
-              disabled={frozen}
-              aria-disabled={frozen || undefined}
-              aria-label={
-                frozen
-                  ? `Download ${entry.name} (locked while frozen)`
-                  : `Download ${entry.name}`
-              }
-              onClick={frozen ? undefined : () => onDownload?.(entry)}
-            >
-              <RiDownloadLine size={16} />
-            </button>
+            <Tooltip label="Download" placement="top">
+              <button
+                type="button"
+                className={cx(
+                  "file_row_download",
+                  frozen && "file_row_download_disabled"
+                )}
+                disabled={frozen}
+                aria-disabled={frozen || undefined}
+                aria-label={
+                  frozen
+                    ? `Download ${entry.name} (locked while frozen)`
+                    : `Download ${entry.name}`
+                }
+                onClick={frozen ? undefined : () => onDownload?.(entry)}
+              >
+                <RiDownloadLine size={16} />
+              </button>
+            </Tooltip>
             {showDelete && (
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={<RiDeleteBin6Line size={16} />}
-                aria-label={`Delete ${entry.name}`}
-                onClick={() => onDelete(entry.id)}
-              />
+              <Tooltip label="Delete" placement="top">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<RiDeleteBin6Line size={16} />}
+                  aria-label={`Delete ${entry.name}`}
+                  onClick={() => onDelete(entry.id)}
+                />
+              </Tooltip>
             )}
           </>
         )}

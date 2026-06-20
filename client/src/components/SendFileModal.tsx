@@ -2,6 +2,7 @@ import { useState } from "react";
 import { RiCloseLine } from "react-icons/ri";
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
+import { Tooltip } from "./ui/Tooltip";
 import { Dropzone } from "./ui/Dropzone";
 import type { PublicMember } from "../lib/api";
 import { formatBytes, shortId } from "../lib/format";
@@ -118,21 +119,23 @@ export function SendFileModal({
                     checked={selected.has(f)}
                     onChange={() => toggle(f)}
                   />
-                  <span className="send_file_modal_filename" title={f.name}>
-                    {f.name}
-                  </span>
+                  <Tooltip label={f.name} whenOverflowing>
+                    <span className="send_file_modal_filename">{f.name}</span>
+                  </Tooltip>
                 </label>
                 <span className="send_file_modal_size">
                   {formatBytes(f.size)}
                 </span>
-                <button
-                  type="button"
-                  className="send_file_modal_remove"
-                  aria-label={`Remove ${f.name}`}
-                  onClick={() => removeFile(i)}
-                >
-                  <RiCloseLine size={16} />
-                </button>
+                <Tooltip label="Remove" placement="left">
+                  <button
+                    type="button"
+                    className="send_file_modal_remove"
+                    aria-label={`Remove ${f.name}`}
+                    onClick={() => removeFile(i)}
+                  >
+                    <RiCloseLine size={16} />
+                  </button>
+                </Tooltip>
               </li>
             ))}
           </ul>

@@ -215,6 +215,16 @@
   min-width: 220px;
 }
 
+// Wrapper that keeps a disabled menu item hoverable so its Tooltip can fire.
+.session_menu_tip {
+  display: block;
+}
+
+// Same idea for a disabled button inside a flex footer row.
+.session_leave_tip {
+  display: inline-flex;
+}
+
 .session_menu_item {
   display: flex;
   align-items: center;

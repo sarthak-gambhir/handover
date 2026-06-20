@@ -28,6 +28,7 @@ import { useToast } from "../components/ui/Toast";
 import { Page } from "../components/ui/Page";
 import { Panel } from "../components/ui/Panel";
 import { Popover } from "../components/ui/Popover";
+import { Tooltip } from "../components/ui/Tooltip";
 import { Tabs } from "../components/ui/Tabs";
 import { StateScreen } from "../components/ui/StateScreen";
 import { Button } from "../components/ui/Button";
@@ -164,6 +165,11 @@ export function Session() {
     setHideRestricted((v) => !v);
     setSelectedFiles(new Set());
   }
+  function clearFilters() {
+    setHideMine(false);
+    setHideRestricted(false);
+    setSelectedFiles(new Set());
+  }
 
   // Tick once a second only while an owner-disconnect countdown is active, so
   // the banner's M:SS display stays current without re-rendering otherwise.
@@ -265,16 +271,13 @@ export function Session() {
   })();
 
   const slugChip = (
-    <button
-      type="button"
-      className="session_chip"
-      onClick={copySlug}
-      title="Copy session ID"
-    >
-      <span className="session_chip_hash">#</span>
-      <span className="session_chip_text">{cleanSlug}</span>
-      <RiFileCopyLine size={14} />
-    </button>
+    <Tooltip label="Copy session ID" placement="bottom">
+      <button type="button" className="session_chip" onClick={copySlug}>
+        <span className="session_chip_hash">#</span>
+        <span className="session_chip_text">{cleanSlug}</span>
+        <RiFileCopyLine size={14} />
+      </button>
+    </Tooltip>
   );
 
   const ownerBadge = s.isOwner ? <Badge variant="success">owner</Badge> : null;
@@ -285,55 +288,65 @@ export function Session() {
       onClose={() => setMenuOpen(false)}
       label="Owner actions"
       trigger={
-        <button
-          type="button"
-          className="session_iconbtn"
-          aria-label="Owner actions"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((o) => !o)}
-        >
-          <RiMore2Fill size={18} />
-        </button>
+        <Tooltip label="Owner actions" placement="bottom">
+          <button
+            type="button"
+            className="session_iconbtn"
+            aria-label="Owner actions"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((o) => !o)}
+          >
+            <RiMore2Fill size={18} />
+          </button>
+        </Tooltip>
       }
     >
       <div className="session_menu" role="menu">
-        <button
-          type="button"
-          role="menuitem"
-          className="session_menu_item"
-          disabled={s.frozen}
-          title={
-            s.frozen ? "Unfreeze the session to manage knocking" : undefined
-          }
-          onClick={() => {
-            setMenuOpen(false);
-            s.setPaused(!s.knockingPaused);
-          }}
+        <Tooltip
+          label={s.frozen ? "Unfreeze the session to manage knocking" : false}
+          placement="left"
         >
-          {s.knockingPaused ? (
-            <RiLockUnlockLine size={16} />
-          ) : (
-            <RiLockLine size={16} />
-          )}
-          {s.knockingPaused ? "Resume knocking" : "Pause knocking"}
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          className="session_menu_item"
-          disabled={s.frozen}
-          title={
-            s.frozen ? "Unfreeze the session to change read-only" : undefined
-          }
-          onClick={() => {
-            setMenuOpen(false);
-            s.setReadOnly(!s.readOnly);
-          }}
+          <span className="session_menu_tip">
+            <button
+              type="button"
+              role="menuitem"
+              className="session_menu_item"
+              disabled={s.frozen}
+              onClick={() => {
+                setMenuOpen(false);
+                s.setPaused(!s.knockingPaused);
+              }}
+            >
+              {s.knockingPaused ? (
+                <RiLockUnlockLine size={16} />
+              ) : (
+                <RiLockLine size={16} />
+              )}
+              {s.knockingPaused ? "Resume knocking" : "Pause knocking"}
+            </button>
+          </span>
+        </Tooltip>
+        <Tooltip
+          label={s.frozen ? "Unfreeze the session to change read-only" : false}
+          placement="left"
         >
-          <RiShieldUserLine size={16} />
-          {s.readOnly ? "Turn off read-only" : "Make read-only"}
-        </button>
+          <span className="session_menu_tip">
+            <button
+              type="button"
+              role="menuitem"
+              className="session_menu_item"
+              disabled={s.frozen}
+              onClick={() => {
+                setMenuOpen(false);
+                s.setReadOnly(!s.readOnly);
+              }}
+            >
+              <RiShieldUserLine size={16} />
+              {s.readOnly ? "Turn off read-only" : "Make read-only"}
+            </button>
+          </span>
+        </Tooltip>
         <button
           type="button"
           role="menuitem"
@@ -355,63 +368,85 @@ export function Session() {
   const bar = (
     <div className="session_bar_actions">
       {s.isOwner && (
-        <button
-          type="button"
-          className="session_bell"
-          aria-label={
+        <Tooltip
+          label={
             s.knockers.length > 0
-              ? `Knock queue, ${s.knockers.length} waiting`
+              ? `Knock queue · ${s.knockers.length} waiting`
               : "Knock queue"
           }
-          aria-haspopup="dialog"
-          aria-expanded={knockOpen}
-          onClick={() => setKnockOpen(true)}
+          placement="bottom"
         >
-          <RiUserAddLine size={18} />
-          {s.knockers.length > 0 && (
-            <span className="session_bell_badge">{s.knockers.length}</span>
-          )}
-        </button>
+          <button
+            type="button"
+            className="session_bell"
+            aria-label={
+              s.knockers.length > 0
+                ? `Knock queue, ${s.knockers.length} waiting`
+                : "Knock queue"
+            }
+            aria-haspopup="dialog"
+            aria-expanded={knockOpen}
+            onClick={() => setKnockOpen(true)}
+          >
+            <RiUserAddLine size={18} />
+            {s.knockers.length > 0 && (
+              <span className="session_bell_badge">{s.knockers.length}</span>
+            )}
+          </button>
+        </Tooltip>
       )}
 
       {s.isOwner && (
-        <button
-          type="button"
-          className="session_bell"
-          aria-label={
+        <Tooltip
+          label={
             s.reports.length > 0
-              ? `Reported members, ${s.reports.length} flagged`
+              ? `Reported members · ${s.reports.length} flagged`
               : "Reported members"
           }
-          aria-haspopup="dialog"
-          aria-expanded={reportsOpen}
-          onClick={() => setReportsOpen(true)}
+          placement="bottom"
         >
-          <RiFlagLine size={18} />
-          {s.reports.length > 0 && (
-            <span className="session_bell_badge">{s.reports.length}</span>
-          )}
-        </button>
+          <button
+            type="button"
+            className="session_bell"
+            aria-label={
+              s.reports.length > 0
+                ? `Reported members, ${s.reports.length} flagged`
+                : "Reported members"
+            }
+            aria-haspopup="dialog"
+            aria-expanded={reportsOpen}
+            onClick={() => setReportsOpen(true)}
+          >
+            <RiFlagLine size={18} />
+            {s.reports.length > 0 && (
+              <span className="session_bell_badge">{s.reports.length}</span>
+            )}
+          </button>
+        </Tooltip>
       )}
 
       {s.isOwner && (
-        <Button
-          size="sm"
-          variant={s.frozen ? "secondary" : "danger"}
-          className="session_action_freeze"
-          icon={
-            s.frozen ? (
-              <RiPlayCircleLine size={16} />
-            ) : (
-              <RiStopCircleLine size={16} />
-            )
-          }
-          aria-label={s.frozen ? "Resume activity" : "Halt all activity"}
-          title={s.frozen ? "Resume activity" : "Halt all activity"}
-          onClick={() => s.setFrozen(!s.frozen)}
+        <Tooltip
+          label={s.frozen ? "Resume activity" : "Halt all activity"}
+          placement="bottom"
         >
-          {s.frozen ? "Resume" : "Halt activity"}
-        </Button>
+          <Button
+            size="sm"
+            variant={s.frozen ? "secondary" : "danger"}
+            className="session_action_freeze"
+            icon={
+              s.frozen ? (
+                <RiPlayCircleLine size={16} />
+              ) : (
+                <RiStopCircleLine size={16} />
+              )
+            }
+            aria-label={s.frozen ? "Resume activity" : "Halt all activity"}
+            onClick={() => s.setFrozen(!s.frozen)}
+          >
+            {s.frozen ? "Resume" : "Halt activity"}
+          </Button>
+        </Tooltip>
       )}
 
       <Button
@@ -426,7 +461,14 @@ export function Session() {
   );
 
   return (
-    <Page wide bar={bar}>
+    <Page
+      wide
+      bar={bar}
+      onBrandClick={(e) => {
+        e.preventDefault();
+        onLeave();
+      }}
+    >
       <div className="session">
         {s.reconnecting && (
           <div
@@ -525,15 +567,14 @@ export function Session() {
             count={s.bucket.length}
             actions={
               s.encryptionActive ? (
-                <span
-                  className="session_encrypted"
-                  title="End-to-end encrypted"
-                >
-                  <RiLockLine size={18} />
-                  <span className="session_encrypted_label">
-                    End-to-end encrypted
+                <Tooltip label="End-to-end encrypted" placement="bottom">
+                  <span className="session_encrypted">
+                    <RiLockLine size={18} />
+                    <span className="session_encrypted_label">
+                      End-to-end encrypted
+                    </span>
                   </span>
-                </span>
+                </Tooltip>
               ) : undefined
             }
           >
@@ -595,33 +636,41 @@ export function Session() {
                       {selectedCount > 0 && (
                         <>
                           {s.isOwner && (
+                            <Tooltip
+                              label="Delete selected files"
+                              placement="bottom"
+                            >
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="session_bucket_delete"
+                                icon={<RiDeleteBin6Line size={16} />}
+                                disabled={s.frozen}
+                                aria-label="Delete selected files"
+                                onClick={() => setConfirmDeleteSelected(true)}
+                              >
+                                Delete
+                              </Button>
+                            </Tooltip>
+                          )}
+                          <Tooltip
+                            label="Download selected files"
+                            placement="bottom"
+                          >
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="session_bucket_delete"
-                              icon={<RiDeleteBin6Line size={16} />}
+                              icon={<RiDownloadLine size={16} />}
                               disabled={s.frozen}
-                              aria-label="Delete selected files"
-                              title="Delete selected files"
-                              onClick={() => setConfirmDeleteSelected(true)}
+                              aria-label="Download selected files"
+                              onClick={() => {
+                                setZipName(`handover-${cleanSlug}`);
+                                setConfirmDownload(true);
+                              }}
                             >
-                              Delete
+                              Download
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            icon={<RiDownloadLine size={16} />}
-                            disabled={s.frozen}
-                            aria-label="Download selected files"
-                            title="Download selected files"
-                            onClick={() => {
-                              setZipName(`handover-${cleanSlug}`);
-                              setConfirmDownload(true);
-                            }}
-                          >
-                            Download
-                          </Button>
+                          </Tooltip>
                         </>
                       )}
                       {hasFilters && (
@@ -631,25 +680,31 @@ export function Session() {
                           label="Filter files"
                           trigger={
                             <span className="session_filter_wrap">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                icon={<RiFilter3Line size={16} />}
-                                aria-haspopup="dialog"
-                                aria-expanded={filtersOpen}
-                                aria-label="Filter files"
-                                className={hiddenCount > 0 ? "active" : undefined}
-                                title={
+                              <Tooltip
+                                label={
                                   hiddenCount > 0
                                     ? `${hiddenCount} file${
                                         hiddenCount === 1 ? "" : "s"
                                       } hidden`
                                     : "Filter files"
                                 }
-                                onClick={() => setFiltersOpen((o) => !o)}
+                                placement="bottom"
                               >
-                                Filters
-                              </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  icon={<RiFilter3Line size={16} />}
+                                  aria-haspopup="dialog"
+                                  aria-expanded={filtersOpen}
+                                  aria-label="Filter files"
+                                  className={
+                                    hiddenCount > 0 ? "active" : undefined
+                                  }
+                                  onClick={() => setFiltersOpen((o) => !o)}
+                                >
+                                  Filters
+                                </Button>
+                              </Tooltip>
                               {hiddenCount > 0 && (
                                 <span className="session_filter_badge">
                                   {hiddenCount}
@@ -727,6 +782,30 @@ export function Session() {
                     ))}
                   </ul>
                 )}
+
+                {s.bucket.length > 0 &&
+                  visibleBucket.length === 0 &&
+                  s.uploads.length === 0 && (
+                    <div className="session_empty">
+                      <div className="session_empty_container">
+                        <span className="session_empty_icon">
+                          <RiFilter3Line size={26} />
+                        </span>
+                        <p className="session_empty_title">
+                          No files match your filters
+                        </p>
+                      </div>
+
+                      <hr className="horizontal_divider subtle" />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={clearFilters}
+                      >
+                        Show all files ({hiddenCount})
+                      </Button>
+                    </div>
+                  )}
               </>
             )}
           </Panel>
@@ -1104,9 +1183,9 @@ export function Session() {
         <ul className="session_download_list">
           {selectedEntries.map((e) => (
             <li key={e.id} className="session_download_item">
-              <span className="session_download_name" title={e.name}>
-                {e.name}
-              </span>
+              <Tooltip label={e.name} whenOverflowing>
+                <span className="session_download_name">{e.name}</span>
+              </Tooltip>
               <span className="session_download_size">
                 {formatBytes(e.size)}
               </span>
@@ -1162,22 +1241,28 @@ export function Session() {
               >
                 Keep files & leave
               </Button>
-              <Button
-                variant="danger"
-                disabled={s.frozen}
-                title={
+              <Tooltip
+                label={
                   s.frozen
                     ? "Session is halted — files can't be deleted right now"
-                    : undefined
+                    : false
                 }
-                onClick={async () => {
-                  setConfirmLeave(false);
-                  await s.deleteOwnUploads();
-                  await performLeave();
-                }}
+                placement="top"
               >
-                Delete my files & leave
-              </Button>
+                <span className="session_leave_tip">
+                  <Button
+                    variant="danger"
+                    disabled={s.frozen}
+                    onClick={async () => {
+                      setConfirmLeave(false);
+                      await s.deleteOwnUploads();
+                      await performLeave();
+                    }}
+                  >
+                    Delete my files & leave
+                  </Button>
+                </span>
+              </Tooltip>
               <Button variant="ghost" onClick={() => setConfirmLeave(false)}>
                 Cancel
               </Button>

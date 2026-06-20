@@ -1,0 +1,93 @@
+// The outer node is fixed-positioned at the anchor point; the placement class
+// shifts it onto the correct side via transform so the inline top/left stay
+// simple anchor coordinates. The visual bubble + caret live on the inner span.
+.tooltip {
+  position: fixed;
+  z-index: 150; // above Modal (100), below Toast (200)
+  pointer-events: none;
+}
+
+.tooltip_top {
+  transform: translate(-50%, -100%);
+}
+.tooltip_bottom {
+  transform: translate(-50%, 0);
+}
+.tooltip_left {
+  transform: translate(-100%, -50%);
+}
+.tooltip_right {
+  transform: translate(0, -50%);
+}
+
+.tooltip_bubble {
+  display: block;
+  position: relative;
+  max-width: 240px;
+  padding: var(--space_1) var(--space_2);
+  background: var(--bg_overlay);
+  border: 1px solid var(--border_strong);
+  border-radius: var(--radius_sm);
+  color: var(--fg);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--bg) 40%, transparent);
+  animation: tooltip_in var(--duration_fast) var(--ease_out);
+}
+
+// Caret: a small rotated square punched out of the bubble edge.
+.tooltip_bubble::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--bg_overlay);
+  border: 1px solid var(--border_strong);
+  transform: rotate(45deg);
+}
+
+.tooltip_top .tooltip_bubble::after {
+  bottom: -5px;
+  left: 50%;
+  margin-left: -4px;
+  border-top: none;
+  border-left: none;
+}
+.tooltip_bottom .tooltip_bubble::after {
+  top: -5px;
+  left: 50%;
+  margin-left: -4px;
+  border-bottom: none;
+  border-right: none;
+}
+.tooltip_left .tooltip_bubble::after {
+  right: -5px;
+  top: 50%;
+  margin-top: -4px;
+  border-bottom: none;
+  border-left: none;
+}
+.tooltip_right .tooltip_bubble::after {
+  left: -5px;
+  top: 50%;
+  margin-top: -4px;
+  border-top: none;
+  border-right: none;
+}
+
+@keyframes tooltip_in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tooltip_bubble {
+    animation: none;
+  }
+}

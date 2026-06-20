@@ -17,6 +17,7 @@ import type { ReactNode } from "react";
 import type { ActivityEntry, ActivityType } from "../lib/api";
 import { relativeTime, formatBytes } from "../lib/format";
 import { cx } from "../lib/cx";
+import { Tooltip } from "./ui/Tooltip";
 import "./ActivityRow.scss";
 
 const ICONS: Record<ActivityType, ReactNode> = {
@@ -146,9 +147,9 @@ export function ActivityRow({ entry }: { entry: ActivityEntry }) {
             <ul className="activity_row_files">
               {entry.files!.map((f, i) => (
                 <li key={`${f.name}_${i}`} className="activity_row_file">
-                  <span className="activity_row_file_name" title={f.name}>
-                    {f.name}
-                  </span>
+                  <Tooltip label={f.name} whenOverflowing>
+                    <span className="activity_row_file_name">{f.name}</span>
+                  </Tooltip>
                   <span className="activity_row_file_size">
                     {formatBytes(f.size)}
                   </span>

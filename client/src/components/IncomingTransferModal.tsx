@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { RiErrorWarningLine } from "react-icons/ri";
 import { Modal } from "./ui/Modal";
 import { Button } from "./ui/Button";
+import { Tooltip } from "./ui/Tooltip";
 import { Input } from "./ui/Input";
 import { formatBytes, shortId } from "../lib/format";
 import {
@@ -119,9 +120,9 @@ export function IncomingTransferModal({
                 checked={selected.has(i)}
                 onChange={() => toggle(i)}
               />
-              <span className="incoming_transfer_modal_name" title={f.name}>
-                {f.name}
-              </span>
+              <Tooltip label={f.name} whenOverflowing>
+                <span className="incoming_transfer_modal_name">{f.name}</span>
+              </Tooltip>
             </label>
             <span className="incoming_transfer_modal_size">
               {formatBytes(f.size)}

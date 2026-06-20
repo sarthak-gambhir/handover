@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Badge } from "./ui/Badge";
 import { PresenceDot } from "./ui/PresenceDot";
 import { Button } from "./ui/Button";
+import { Tooltip } from "./ui/Tooltip";
 import type { PublicMember } from "../lib/api";
 import { shortId } from "../lib/format";
 import "./MemberRow.scss";
@@ -130,15 +131,17 @@ export function MemberRow({
           )}
           {showMenu && (
             <div className="member_row_menu_wrap" ref={menuWrapRef}>
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={<RiMore2Fill size={16} />}
-                aria-label="Member actions"
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                onClick={toggleMenu}
-              />
+              <Tooltip label="Member actions" placement="top">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<RiMore2Fill size={16} />}
+                  aria-label="Member actions"
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  onClick={toggleMenu}
+                />
+              </Tooltip>
               {menuOpen &&
                 menuPos &&
                 createPortal(
