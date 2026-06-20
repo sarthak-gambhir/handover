@@ -21,8 +21,7 @@ import {
   RiPlayCircleLine,
   RiShieldFlashLine,
   RiFlagLine,
-  RiEyeLine,
-  RiEyeOffLine,
+  RiShieldUserLine,
 } from "react-icons/ri";
 import { useSession } from "../lib/use_session";
 import { useToast } from "../components/ui/Toast";
@@ -332,7 +331,7 @@ export function Session() {
             s.setReadOnly(!s.readOnly);
           }}
         >
-          {s.readOnly ? <RiEyeLine size={16} /> : <RiEyeOffLine size={16} />}
+          <RiShieldUserLine size={16} />
           {s.readOnly ? "Turn off read-only" : "Make read-only"}
         </button>
         <button
@@ -471,7 +470,7 @@ export function Session() {
             role="status"
             aria-live="polite"
           >
-            <RiEyeLine size={16} />
+            <RiShieldUserLine size={16} />
             {s.isOwner
               ? "Read-only mode — only you can share files; others can download."
               : "Read-only session — only the owner can share files. You can download what's shared."}

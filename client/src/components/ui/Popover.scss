@@ -15,8 +15,8 @@
   border: 1px solid var(--border_strong);
   border-radius: var(--radius_lg);
   box-shadow:
-    0 16px 40px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(0, 0, 0, 0.2);
+    0 16px 40px color-mix(in srgb, var(--bg) 50%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--bg) 20%, transparent);
   animation: popover_in var(--duration_fast) var(--ease_out);
 }
 

@@ -11,7 +11,7 @@ import {
   RiP2pLine,
   RiShieldCheckLine,
   RiLockLine,
-  RiEyeLine,
+  RiShieldUserLine,
 } from "react-icons/ri";
 import { Page } from "../components/ui/Page";
 import { BrandMark } from "../components/ui/BrandMark";
@@ -169,7 +169,7 @@ export function Home() {
                   <label className="home_readonly">
                     <span className="home_readonly_text">
                       <span className="home_readonly_label">
-                        <RiEyeLine size={16} />
+                        <RiShieldUserLine size={16} />
                         Read-only session
                       </span>
                       <span className="home_readonly_hint">

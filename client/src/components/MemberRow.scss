@@ -57,7 +57,7 @@
   border: 1px solid var(--border_strong);
   border-radius: var(--radius_md);
   padding: var(--space_1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--bg) 40%, transparent);
 }
 
 .member_row_menu_item {

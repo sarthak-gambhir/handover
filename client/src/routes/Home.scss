@@ -67,10 +67,10 @@
   // Active tab uses the primary accent fill to match the form action.
   .tabs_tab_active {
     background: var(--accent);
-    color: #fff;
+    color: var(--fg);
 
     &:hover {
-      color: #fff;
+      color: var(--fg);
     }
   }
 }
@@ -159,7 +159,7 @@
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    background: #fff;
+    background: var(--fg);
     transition: transform var(--duration_fast) var(--ease_out);
   }
 

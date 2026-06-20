@@ -8,7 +8,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space_4);
-  background: rgba(0, 0, 0, 0.7);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
   backdrop-filter: blur(4px);
   opacity: 1;
   transition: opacity var(--duration_med) var(--ease_out);

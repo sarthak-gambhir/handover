@@ -106,7 +106,7 @@
   align-items: flex-start;
   font-size: 12px;
   color: var(--warn);
-  background: rgba(245, 165, 36, 0.1);
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
   border-radius: var(--radius_md);
   padding: var(--space_3);
   margin-bottom: var(--space_3);

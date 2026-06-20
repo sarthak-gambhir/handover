@@ -9,7 +9,7 @@ $fg_muted: #9a9aa6;
 $fg_subtle: #5e5e6b;
 $accent: #da6100;
 $accent_dark: #cb3b02;
-$accent_soft: #da61001f;
+$accent_soft: color-mix(in srgb, var(--accent) 14%, transparent);
 $success: #3ecf8e;
 $warn: #f5a524;
 $danger: #ef4444;

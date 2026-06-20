@@ -39,7 +39,7 @@
 .tabs_tab_active {
   background: var(--bg_elevated);
   color: var(--fg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--bg) 30%, transparent);
 }
 
 .tabs_tab_badge {

@@ -47,8 +47,14 @@ export function canSeeActivity(
 ): boolean {
   if (viewerId === ownerId) return true;
   if (PUBLIC_ACTIVITY.has(entry.type)) return true;
-  if (entry.type === "report") return entry.actor_user_id === viewerId;
-  // download, transfer, restrict, unrestrict: actor or target only.
+  // report, restrict, unrestrict: actor-only (the target is kept unaware).
+  if (
+    entry.type === "report" ||
+    entry.type === "restrict" ||
+    entry.type === "unrestrict"
+  )
+    return entry.actor_user_id === viewerId;
+  // download, transfer: actor or target only.
   return (
     entry.actor_user_id === viewerId || entry.target_user_id === viewerId
   );
