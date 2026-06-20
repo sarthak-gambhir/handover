@@ -12,11 +12,18 @@ interface MemberRowProps {
   member: PublicMember;
   isYou: boolean;
   viewerIsOwner: boolean;
+  // Whether the viewer has personally restricted this member (P2P, viewer-local).
+  restricted?: boolean;
+  // Whether the viewer themselves has been blocked by the owner (can't send).
+  viewerBlocked?: boolean;
   onSend: (member: PublicMember) => void;
   onKick: (member: PublicMember) => void;
   onMakeOwner: (member: PublicMember) => void;
   onDeleteUploads: (member: PublicMember) => void;
-  // While the session is frozen, only Kick stays available.
+  onRestrict: (member: PublicMember, restrict: boolean) => void;
+  onReport: (member: PublicMember) => void;
+  onBlock: (member: PublicMember, blocked: boolean) => void;
+  // While the session is frozen, only moderation actions stay available.
   frozen?: boolean;
 }
 
@@ -24,10 +31,15 @@ export function MemberRow({
   member,
   isYou,
   viewerIsOwner,
+  restricted = false,
+  viewerBlocked = false,
   onSend,
   onKick,
   onMakeOwner,
   onDeleteUploads,
+  onRestrict,
+  onReport,
+  onBlock,
   frozen = false,
 }: MemberRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -39,7 +51,10 @@ export function MemberRow({
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const canSend = !isYou && member.online;
-  const canManage = viewerIsOwner && !isYou;
+  // Every member can restrict/report another; only the owner gets the
+  // owner-only items. The owner themselves can't be restricted/reported/blocked
+  // or otherwise managed, so their row has no menu at all.
+  const showMenu = !isYou && !member.is_owner;
 
   function toggleMenu() {
     setMenuOpen((open) => {
@@ -91,6 +106,8 @@ export function MemberRow({
       <div className="member_row_badges">
         {isYou && <Badge variant="accent">you</Badge>}
         {member.is_owner && <Badge variant="neutral">owner</Badge>}
+        {member.blocked && <Badge variant="danger">blocked</Badge>}
+        {!isYou && restricted && <Badge variant="warn">restricted</Badge>}
       </div>
       {!isYou && (
         <div className="member_row_actions">
@@ -98,13 +115,18 @@ export function MemberRow({
             size="sm"
             variant="ghost"
             icon={<RiSendPlane2Line size={16} />}
-            disabled={!canSend || frozen}
+            disabled={!canSend || frozen || viewerBlocked}
+            title={
+              viewerBlocked
+                ? "The owner has blocked you from sending files"
+                : undefined
+            }
             onClick={() => onSend(member)}
             aria-label={`Send file to ${member.display_name}`}
           >
             Send
           </Button>
-          {canManage && (
+          {showMenu && (
             <div className="member_row_menu_wrap" ref={menuWrapRef}>
               <Button
                 size="sm"
@@ -127,35 +149,74 @@ export function MemberRow({
                     <button
                       className="member_row_menu_item"
                       role="menuitem"
-                      disabled={frozen}
                       onClick={() => {
                         setMenuOpen(false);
-                        onMakeOwner(member);
+                        onRestrict(member, !restricted);
                       }}
                     >
-                      Make owner
+                      {restricted ? "Unrestrict" : "Restrict"}
                     </button>
-                    <button
-                      className="member_row_menu_item"
-                      role="menuitem"
-                      disabled={frozen}
-                      onClick={() => {
-                        setMenuOpen(false);
-                        onDeleteUploads(member);
-                      }}
-                    >
-                      Delete all uploads
-                    </button>
-                    <button
-                      className="member_row_menu_item member_row_menu_danger"
-                      role="menuitem"
-                      onClick={() => {
-                        setMenuOpen(false);
-                        onKick(member);
-                      }}
-                    >
-                      Kick
-                    </button>
+                    {/* Reports exist for the owner to review; the owner has
+                        Block/Kick directly, so reporting to themselves is moot. */}
+                    {!viewerIsOwner && (
+                      <button
+                        className="member_row_menu_item"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          onReport(member);
+                        }}
+                      >
+                        Report
+                      </button>
+                    )}
+                    {viewerIsOwner && (
+                      <>
+                        <div className="member_row_menu_sep" role="separator" />
+                        <button
+                          className="member_row_menu_item"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            onBlock(member, !member.blocked);
+                          }}
+                        >
+                          {member.blocked ? "Unblock" : "Block"}
+                        </button>
+                        <button
+                          className="member_row_menu_item"
+                          role="menuitem"
+                          disabled={frozen}
+                          onClick={() => {
+                            setMenuOpen(false);
+                            onMakeOwner(member);
+                          }}
+                        >
+                          Make owner
+                        </button>
+                        <button
+                          className="member_row_menu_item"
+                          role="menuitem"
+                          disabled={frozen}
+                          onClick={() => {
+                            setMenuOpen(false);
+                            onDeleteUploads(member);
+                          }}
+                        >
+                          Delete all uploads
+                        </button>
+                        <button
+                          className="member_row_menu_item member_row_menu_danger"
+                          role="menuitem"
+                          onClick={() => {
+                            setMenuOpen(false);
+                            onKick(member);
+                          }}
+                        >
+                          Kick
+                        </button>
+                      </>
+                    )}
                   </div>,
                   document.body
                 )}

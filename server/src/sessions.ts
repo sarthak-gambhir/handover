@@ -12,6 +12,7 @@ import {
   type TransferFileMeta,
   type PublicMember,
   type PublicBucketEntry,
+  type PublicReport,
   TERMINAL_STATES,
 } from "./types.js";
 import { normalizeSlug, makeUniqueSlug } from "./slug.js";
@@ -79,6 +80,7 @@ export class Store extends EventEmitter {
       joined_at: now,
       last_seen: now,
       offline_grace_timer: null,
+      restricted_user_ids: new Set(),
     };
 
     const session: Session = {
@@ -89,6 +91,8 @@ export class Store extends EventEmitter {
       invites: new Map(),
       bucket: new Map(),
       transfers: new Map(),
+      blocked_user_ids: new Set(),
+      reports: new Map(),
       total_bytes: 0,
       last_activity: now,
       owner_disconnected_at: null,
@@ -191,6 +195,7 @@ export class Store extends EventEmitter {
       joined_at: now,
       last_seen: now,
       offline_grace_timer: null,
+      restricted_user_ids: new Set(),
     };
     session.members.set(user_id, member);
     this.tokens.set(token, {
@@ -308,6 +313,16 @@ export class Store extends EventEmitter {
         session.pending_owner_offer.from_user_id === user_id)
     ) {
       session.pending_owner_offer = null;
+    }
+    // Drop moderation state tied to the departing member. We clear them as a
+    // reported target and as a reporter, and lift any owner block. Stale
+    // entries in other members' restrict lists are harmless and left alone.
+    session.blocked_user_ids.delete(user_id);
+    session.reports.delete(user_id);
+    for (const report of session.reports.values()) {
+      report.reporters.delete(user_id);
+      if (report.reporters.size === 0)
+        session.reports.delete(report.reported_user_id);
     }
     this.touch(session);
     return member;
@@ -494,18 +509,21 @@ export class Store extends EventEmitter {
 
   // ---- projections -------------------------------------------------------
 
-  publicMember(m: Member): PublicMember {
+  publicMember(m: Member, session?: Session): PublicMember {
     return {
       user_id: m.user_id,
       display_name: m.display_name,
       is_owner: m.is_owner,
       online: m.socket_id !== null,
       pubkey: m.pubkey ?? null,
+      blocked: session ? session.blocked_user_ids.has(m.user_id) : false,
     };
   }
 
   publicMembers(session: Session): PublicMember[] {
-    return [...session.members.values()].map((m) => this.publicMember(m));
+    return [...session.members.values()].map((m) =>
+      this.publicMember(m, session)
+    );
   }
 
   publicBucketEntry(e: BucketEntry): PublicBucketEntry {
@@ -521,6 +539,62 @@ export class Store extends EventEmitter {
 
   publicBucket(session: Session): PublicBucketEntry[] {
     return [...session.bucket.values()].map((e) => this.publicBucketEntry(e));
+  }
+
+  // ---- moderation --------------------------------------------------------
+
+  /**
+   * Record a report of `reported_user_id` by `reporter_user_id` (deduped per
+   * reporter). Returns true if the report set changed.
+   */
+  addReport(
+    session: Session,
+    reported_user_id: string,
+    reporter_user_id: string,
+    reason?: string
+  ): boolean {
+    let report = session.reports.get(reported_user_id);
+    if (!report) {
+      report = { reported_user_id, reporters: new Map() };
+      session.reports.set(reported_user_id, report);
+    }
+    const existed = report.reporters.has(reporter_user_id);
+    report.reporters.set(reporter_user_id, { reason, at: Date.now() });
+    this.touch(session);
+    return !existed;
+  }
+
+  /** Drop a member from the owner's reports queue. Returns true if removed. */
+  dismissReport(session: Session, reported_user_id: string): boolean {
+    const removed = session.reports.delete(reported_user_id);
+    if (removed) this.touch(session);
+    return removed;
+  }
+
+  /** Owner-facing projection of the reports queue, newest report first. */
+  publicReports(session: Session): PublicReport[] {
+    const out: PublicReport[] = [];
+    for (const report of session.reports.values()) {
+      const reporters: PublicReport["reporters"] = [];
+      for (const [reporterId, info] of report.reporters) {
+        const member = session.members.get(reporterId);
+        reporters.push({
+          display_name: member?.display_name ?? "Former member",
+          reason: info.reason,
+          at: info.at,
+        });
+      }
+      reporters.sort((a, b) => b.at - a.at);
+      const target = session.members.get(report.reported_user_id);
+      out.push({
+        user_id: report.reported_user_id,
+        display_name: target?.display_name ?? "Former member",
+        count: reporters.length,
+        reporters,
+      });
+    }
+    out.sort((a, b) => (b.reporters[0]?.at ?? 0) - (a.reporters[0]?.at ?? 0));
+    return out;
   }
 
   memberCount(): number {

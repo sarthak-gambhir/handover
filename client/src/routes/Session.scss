@@ -386,7 +386,8 @@
   align-items: center;
   gap: var(--space_1);
 
-  .session_bucket_hint_eye.active {
+  // Reflect an active (hiding) filter on the trigger.
+  .button.active {
     color: var(--accent);
   }
 
@@ -405,25 +406,102 @@
   color: var(--danger);
 }
 
-.session_bucket_hint {
-  align-items: center;
+// Filter popover trigger + badge.
+.session_filter_wrap {
+  position: relative;
   display: inline-flex;
-  justify-content: center;
-  gap: var(--space_3);
-  padding-bottom: var(--space_4);
-  text-align: center;
-  font-size: 13px;
-  color: var(--fg_muted);
+}
 
-  .session_bucket_hint_eye {
-    cursor: pointer;
-    color: var(--accent);
+.session_filter_badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.session_filter_menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space_1);
+  padding: var(--space_1);
+}
+
+.session_filter_item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space_3);
+  padding: var(--space_2) var(--space_3);
+  border-radius: var(--radius_sm);
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--bg_overlay);
+  }
+}
+
+// Toggle switch (a checkbox styled as a sliding track + thumb).
+.session_switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--border_strong);
+  cursor: pointer;
+  transition: background var(--duration_fast) var(--ease_out);
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform var(--duration_fast) var(--ease_out);
+  }
+
+  &:checked {
+    background: var(--accent);
+  }
+
+  &:checked::after {
+    transform: translateX(14px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 }
 
 // Bulk-download confirmation file list.
 .session_download_note {
   margin-bottom: var(--space_3);
+  font-size: 13px;
+  color: var(--fg_muted);
+}
+
+.session_report_note {
+  margin: 0 0 var(--space_3);
   font-size: 13px;
   color: var(--fg_muted);
 }

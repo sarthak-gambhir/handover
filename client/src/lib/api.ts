@@ -8,6 +8,16 @@ export interface PublicMember {
   // Base64 SPKI of the member's ECDH public key, used to wrap the bucket
   // content key for them. Absent until the member's socket has identified.
   pubkey?: string;
+  // True when the owner has blocked this member from sending.
+  blocked?: boolean;
+}
+
+// Owner-facing view of a reported member.
+export interface PublicReport {
+  user_id: string;
+  display_name: string;
+  count: number;
+  reporters: { display_name: string; reason?: string; at: number }[];
 }
 
 export interface PublicBucketEntry {

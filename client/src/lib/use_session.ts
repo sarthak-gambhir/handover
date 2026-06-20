@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { PublicMember, PublicBucketEntry } from "./api";
+import type { PublicMember, PublicBucketEntry, PublicReport } from "./api";
 import { createSocket, type AppSocket, type TransferFileMeta } from "./socket";
 import { sessionStore } from "./sessionStore";
 import { useToast } from "../components/ui/Toast";
@@ -46,6 +46,12 @@ export function useSession(slug: string) {
   } | null>(null);
   const [yourUserId, setYourUserId] = useState("");
   const [ownerUserId, setOwnerUserId] = useState("");
+  // Moderation: this client's personal restrict list and (owner-only) the
+  // reports queue.
+  const [restrictedUserIds, setRestrictedUserIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [reports, setReports] = useState<PublicReport[]>([]);
   // Absolute local time when the owner-disconnect grace expires (session ends),
   // or null when the owner is present. Drives the countdown banner.
   const [ownerGraceEndsAt, setOwnerGraceEndsAt] = useState<number | null>(null);
@@ -104,6 +110,12 @@ export function useSession(slug: string) {
   } = useBucketUploads(slug, yourUserId, prepareUpload);
 
   const isOwner = yourUserId !== "" && yourUserId === ownerUserId;
+  // Whether the owner has blocked *you*. A blocked member can't P2P-send to
+  // anyone or upload to the bucket (the server enforces both); we reflect it in
+  // the UI so the actions are disabled rather than failing on attempt.
+  const youBlocked = members.some(
+    (m) => m.user_id === yourUserId && !!m.blocked
+  );
 
   // While frozen the session is read-only; refuse mutating actions client-side
   // (the server also rejects them with 423/session_frozen as a backstop).
@@ -111,6 +123,10 @@ export function useSession(slug: string) {
     (files: File[]) => {
       if (frozen) {
         toast("Session is frozen — uploads are paused.", "warn");
+        return;
+      }
+      if (youBlocked) {
+        toast("The owner has blocked you from sharing files.", "danger");
         return;
       }
       if (!keyReady) {
@@ -122,7 +138,7 @@ export function useSession(slug: string) {
       }
       rawUploadFiles(files);
     },
-    [frozen, keyReady, rawUploadFiles, toast]
+    [frozen, youBlocked, keyReady, rawUploadFiles, toast]
   );
   const deleteFile = useCallback(
     async (id: string) => {
@@ -375,6 +391,8 @@ export function useSession(slug: string) {
       setFrozenState(p.frozen);
       setMembers(p.members);
       setBucket(p.bucket);
+      setRestrictedUserIds(new Set(p.your_restricted));
+      setReports(p.reports);
       setOwnerGraceEndsAt(
         p.owner_grace_ms != null ? Date.now() + p.owner_grace_ms : null
       );
@@ -448,6 +466,10 @@ export function useSession(slug: string) {
     );
     socket.on("knocking:paused", (p) => setKnockingPaused(p.paused));
     socket.on("session:frozen", (p) => setFrozenState(p.frozen));
+    socket.on("member:restricted", (p) =>
+      setRestrictedUserIds(new Set(p.restricted_user_ids))
+    );
+    socket.on("reports:list", (p) => setReports(p.reports));
     socket.on("invite:used", (p) => {
       setInviteUsed({ code: p.code, at: Date.now() });
       toast(`${p.display_name} joined via an invite link.`, "info");
@@ -631,6 +653,10 @@ export function useSession(slug: string) {
         setStatus("fatal");
         setFatalMessage("You are not a member of this session.");
         socket.disconnect();
+      } else if (e.code === "sender_blocked") {
+        toast("The owner has blocked you from sending files.", "danger");
+      } else if (e.code === "sender_restricted") {
+        toast("This member isn't accepting files from you.", "warn");
       }
     });
 
@@ -671,6 +697,10 @@ export function useSession(slug: string) {
         toast("Session is frozen — transfers are paused.", "warn");
         return;
       }
+      if (youBlocked) {
+        toast("The owner has blocked you from sending files.", "danger");
+        return;
+      }
       const key = randomId();
       filesRef.current.set(key, files);
       outgoingQueue.current.push({ key, to_user_id: recipient.user_id });
@@ -697,7 +727,7 @@ export function useSession(slug: string) {
         client_ref: key,
       });
     },
-    [frozen, toast]
+    [frozen, youBlocked, toast]
   );
 
   const acceptIncoming = useCallback(
@@ -810,6 +840,34 @@ export function useSession(slug: string) {
       socketRef.current?.emit("transfer_ownership", { to_user_id: user_id }),
     []
   );
+  // Moderation actions.
+  const restrictMember = useCallback((user_id: string, restrict: boolean) => {
+    socketRef.current?.emit("member:restrict", { user_id, restrict });
+    // Optimistic local update; the server echoes the authoritative list.
+    setRestrictedUserIds((prev) => {
+      const next = new Set(prev);
+      if (restrict) next.add(user_id);
+      else next.delete(user_id);
+      return next;
+    });
+  }, []);
+  const reportMember = useCallback(
+    (user_id: string, reason?: string) => {
+      socketRef.current?.emit("member:report", { user_id, reason });
+      setRestrictedUserIds((prev) => new Set(prev).add(user_id));
+      toast("Reported. You won't receive files from them.", "success");
+    },
+    [toast]
+  );
+  const blockMember = useCallback(
+    (user_id: string, blocked: boolean) =>
+      socketRef.current?.emit("member:block", { user_id, blocked }),
+    []
+  );
+  const dismissReport = useCallback((user_id: string) => {
+    socketRef.current?.emit("report:dismiss", { user_id });
+    setReports((prev) => prev.filter((r) => r.user_id !== user_id));
+  }, []);
   const setPaused = useCallback(
     (paused: boolean) => {
       if (frozen) {
@@ -1064,6 +1122,9 @@ export function useSession(slug: string) {
     ownerUserId,
     ownerGraceEndsAt,
     isOwner,
+    youBlocked,
+    restrictedUserIds,
+    reports,
     uploads,
     transfers,
     incoming,
@@ -1090,6 +1151,10 @@ export function useSession(slug: string) {
     reject,
     kick,
     makeOwner,
+    restrictMember,
+    reportMember,
+    blockMember,
+    dismissReport,
     setPaused,
     setFrozen,
     deleteOrphanedFiles,

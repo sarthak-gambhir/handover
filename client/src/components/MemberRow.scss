@@ -82,3 +82,9 @@
 .member_row_menu_danger {
   color: var(--danger);
 }
+
+.member_row_menu_sep {
+  height: 1px;
+  margin: var(--space_1) var(--space_2);
+  background: var(--border_strong);
+}

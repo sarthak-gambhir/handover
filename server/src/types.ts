@@ -21,6 +21,9 @@ export type Member = {
   // only relays it; it never holds the symmetric content key. Null until the
   // member's socket has identified.
   pubkey?: string | null;
+  // Personal block list: user_ids this member refuses to receive P2P transfers
+  // from. Owner-independent; only affects sends directed at this member.
+  restricted_user_ids: Set<string>;
 };
 
 export type Invite = {
@@ -51,6 +54,13 @@ export type TransferStateName =
 
 export type TransferFileMeta = { name: string; size: number };
 
+// A member flagged by one or more peers. Keyed in Session.reports by the
+// reported member's user_id; reporters are deduped by their own user_id.
+export type Report = {
+  reported_user_id: string;
+  reporters: Map<string, { reason?: string; at: number }>;
+};
+
 export type TransferState = {
   transfer_id: string; // SERVER-generated random 16-byte hex
   from_user_id: string; // pinned at request time (NOT socket-bound)
@@ -70,6 +80,12 @@ export type Session = {
   invites: Map<string, Invite>; // single-use invite codes, by code
   bucket: Map<string, BucketEntry>; // by file id
   transfers: Map<string, TransferState>; // by transfer_id
+  // Owner "block" list: user_ids barred from P2P-sending to anyone AND from
+  // uploading to the shared bucket. Reversible; blocked members may still
+  // receive and download.
+  blocked_user_ids: Set<string>;
+  // Member reports queue, visible only to the owner. Keyed by reported user_id.
+  reports: Map<string, Report>;
   total_bytes: number;
   last_activity: number;
   owner_disconnected_at: number | null; // for owner grace
@@ -98,6 +114,17 @@ export type PublicMember = {
   is_owner: boolean;
   online: boolean;
   pubkey?: string | null;
+  // True when the owner has blocked this member from sending. Broadcast to all
+  // so clients can surface a "blocked" badge.
+  blocked?: boolean;
+};
+
+// Owner-facing projection of a reported member.
+export type PublicReport = {
+  user_id: string;
+  display_name: string;
+  count: number;
+  reporters: { display_name: string; reason?: string; at: number }[];
 };
 
 export type PublicBucketEntry = {

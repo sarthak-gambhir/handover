@@ -11,6 +11,7 @@ import {
   type TransferState,
   type TransferStateName,
   type TransferFileMeta,
+  TERMINAL_STATES,
 } from "./types.js";
 
 interface SocketData {
@@ -206,6 +207,22 @@ export function registerWs(io: Server): void {
     socket.on("owner_accept", () => handleOwnerAccept(io, socket));
     socket.on("owner_decline", () => handleOwnerDecline(io, socket));
 
+    // ---- moderation ----
+    socket.on(
+      "member:restrict",
+      (p: { user_id?: string; restrict?: boolean }) =>
+        handleRestrict(io, socket, p)
+    );
+    socket.on("member:report", (p: { user_id?: string; reason?: string }) =>
+      handleReport(io, socket, p)
+    );
+    socket.on("member:block", (p: { user_id?: string; blocked?: boolean }) =>
+      handleBlock(io, socket, p)
+    );
+    socket.on("report:dismiss", (p: { user_id?: string }) =>
+      handleReportDismiss(io, socket, p)
+    );
+
     // ---- signaling ----
     socket.on(
       "transfer:request",
@@ -385,6 +402,9 @@ function handleIdentify(
     members: store.publicMembers(session),
     bucket: store.publicBucket(session),
     owner_grace_ms,
+    your_restricted: [...member.restricted_user_ids],
+    // Only the owner moderates, so the reports queue is owner-only.
+    reports: member.is_owner ? store.publicReports(session) : [],
   });
   io.to(room(slug)).emit("member:online", { user_id: member.user_id });
   broadcastMembers(io, session);
@@ -502,7 +522,7 @@ function handleAdmit(
     });
   }
   io.to(room(session.slug)).emit("member:joined", {
-    member: store.publicMember(member),
+    member: store.publicMember(member, session),
   });
   broadcastMembers(io, session);
   // Clear the resolved knock from the owner's queue.
@@ -580,6 +600,176 @@ function handleKick(
     io.sockets.sockets.get(targetSocketId)?.disconnect(true);
   }
   broadcastMembers(io, session);
+  // The kicked member is dropped from the reports queue (as target/reporter).
+  emitReports(io, session);
+}
+
+// ---- moderation: restrict / report / block --------------------------------
+
+/** Cancel non-terminal transfers matching a predicate; notify both peers. */
+function cancelTransfersWhere(
+  io: Server,
+  session: Session,
+  by_user_id: string,
+  reason: string,
+  match: (t: TransferState) => boolean
+): void {
+  for (const transfer of session.transfers.values()) {
+    if (TERMINAL_STATES.has(transfer.state)) continue;
+    if (!match(transfer)) continue;
+    store.setTransferState(transfer, "cancelled");
+    for (const uid of [transfer.from_user_id, transfer.to_user_id]) {
+      emitTo(io, memberByUserId(session, uid), "transfer:cancelled", {
+        transfer_id: transfer.transfer_id,
+        by_user_id,
+        reason,
+      });
+    }
+  }
+}
+
+/** Send the caller their current personal restrict list. */
+function emitRestrictList(socket: AppSocket, member: Member): void {
+  socket.emit("member:restricted", {
+    restricted_user_ids: [...member.restricted_user_ids],
+  });
+}
+
+/** Push the reports queue to the owner's socket. */
+function emitReports(io: Server, session: Session): void {
+  const owner = session.members.get(session.owner_user_id);
+  emitTo(io, owner, "reports:list", { reports: store.publicReports(session) });
+}
+
+// Any member may restrict another: that member can no longer P2P-send to them.
+function handleRestrict(
+  io: Server,
+  socket: AppSocket,
+  p: { user_id?: string; restrict?: boolean }
+): void {
+  const ctx = getMemberContext(socket);
+  if (!ctx || !p.user_id) return;
+  const { session, member } = ctx;
+  if (p.user_id === member.user_id) return; // can't restrict yourself
+  if (p.user_id === session.owner_user_id) return; // owner is the trust anchor
+  const restrict = Boolean(p.restrict);
+  if (restrict) {
+    member.restricted_user_ids.add(p.user_id);
+    // Drop any in-flight send from the restricted member to me.
+    cancelTransfersWhere(
+      io,
+      session,
+      member.user_id,
+      "restricted",
+      (t) => t.from_user_id === p.user_id && t.to_user_id === member.user_id
+    );
+  } else {
+    member.restricted_user_ids.delete(p.user_id);
+  }
+  emitRestrictList(socket, member);
+}
+
+// Any member may report another. Reporting auto-restricts the target for the
+// reporter and surfaces the member in the owner's reports queue.
+function handleReport(
+  io: Server,
+  socket: AppSocket,
+  p: { user_id?: string; reason?: string }
+): void {
+  const ctx = getMemberContext(socket);
+  if (!ctx || !p.user_id) return;
+  const { session, member } = ctx;
+  if (p.user_id === member.user_id) return; // can't report yourself
+  if (p.user_id === session.owner_user_id) return; // owner moderates; not reportable
+  const target = session.members.get(p.user_id);
+  if (!target) {
+    socket.emit("error", {
+      code: "member_not_found",
+      message: "no such member",
+    });
+    return;
+  }
+  const reason =
+    typeof p.reason === "string" && p.reason.trim()
+      ? p.reason.trim().slice(0, 500)
+      : undefined;
+  store.addReport(session, p.user_id, member.user_id, reason);
+  // Auto-restrict: the reporter stops receiving from the reported member.
+  member.restricted_user_ids.add(p.user_id);
+  cancelTransfersWhere(
+    io,
+    session,
+    member.user_id,
+    "restricted",
+    (t) => t.from_user_id === p.user_id && t.to_user_id === member.user_id
+  );
+  emitRestrictList(socket, member);
+  emitReports(io, session);
+}
+
+// Owner-only: block bars a member from P2P-sending to anyone and from bucket
+// uploads. Reversible. Blocked members may still receive and download.
+function handleBlock(
+  io: Server,
+  socket: AppSocket,
+  p: { user_id?: string; blocked?: boolean }
+): void {
+  const ctx = getOwnerContext(socket);
+  if (!ctx) {
+    denyOwnerAction(socket);
+    return;
+  }
+  if (!p.user_id) return;
+  const { session } = ctx;
+  if (p.user_id === session.owner_user_id) return; // can't block the owner
+  const target = session.members.get(p.user_id);
+  if (!target) {
+    socket.emit("error", {
+      code: "member_not_found",
+      message: "no such member",
+    });
+    return;
+  }
+  const blocked = Boolean(p.blocked);
+  if (blocked) {
+    session.blocked_user_ids.add(p.user_id);
+    // Drop any in-flight sends originating from the blocked member.
+    cancelTransfersWhere(
+      io,
+      session,
+      ctx.owner.user_id,
+      "sender_blocked",
+      (t) => t.from_user_id === p.user_id
+    );
+    // Let the blocked member know immediately (best-effort toast).
+    if (target.socket_id) {
+      io.to(target.socket_id).emit("error", {
+        code: "sender_blocked",
+        message: "The owner has blocked you from sending files.",
+      });
+    }
+  } else {
+    session.blocked_user_ids.delete(p.user_id);
+  }
+  store.touch(session);
+  broadcastMembers(io, session);
+}
+
+// Owner-only: dismiss ("ignore") a reported member. The reporter's personal
+// restrict is intentionally left in place.
+function handleReportDismiss(
+  io: Server,
+  socket: AppSocket,
+  p: { user_id?: string }
+): void {
+  const ctx = getOwnerContext(socket);
+  if (!ctx) {
+    denyOwnerAction(socket);
+    return;
+  }
+  if (!p.user_id) return;
+  store.dismissReport(ctx.session, p.user_id);
+  emitReports(io, ctx.session);
 }
 
 // ---- owner: pause knocking -------------------------------------------------
@@ -771,6 +961,22 @@ function handleTransferRequest(
     socket.emit("error", {
       code: "recipient_unavailable",
       message: "recipient offline",
+    });
+    return;
+  }
+  // Moderation gates. The owner block bars sending to anyone; a recipient's
+  // personal restrict bars this specific sender.
+  if (session.blocked_user_ids.has(user_id)) {
+    socket.emit("error", {
+      code: "sender_blocked",
+      message: "The owner has blocked you from sending files.",
+    });
+    return;
+  }
+  if (recipient.restricted_user_ids.has(user_id)) {
+    socket.emit("error", {
+      code: "sender_restricted",
+      message: "This member isn't accepting files from you.",
     });
     return;
   }
@@ -1077,6 +1283,8 @@ function handleLeave(io: Server, socket: AppSocket, ack?: () => void): void {
   forgetTransferRate(data.user_id);
   io.to(room(session.slug)).emit("member:left", { user_id: data.user_id });
   broadcastMembers(io, session);
+  // A departing member is pruned from the reports queue (as target/reporter).
+  emitReports(io, session);
   socket.leave(room(session.slug));
   ack?.();
 }

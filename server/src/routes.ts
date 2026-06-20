@@ -66,6 +66,16 @@ function blockIfFrozen(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
+// Reject uploads from a member the owner has blocked. Must run after
+// requireMember so req.session/req.user_id are populated.
+function blockIfMuted(req: Request, res: Response, next: NextFunction): void {
+  if (req.user_id && req.session?.blocked_user_ids.has(req.user_id)) {
+    res.status(403).json({ error: "blocked" });
+    return;
+  }
+  next();
+}
+
 // ---- upload reservation lifecycle ---------------------------------------
 
 interface Reservation {
@@ -326,6 +336,7 @@ router.get("/sessions/:slug", requireMember, (req: Request, res: Response) => {
 router.post(
   "/sessions/:slug/files",
   requireMember,
+  blockIfMuted,
   blockIfFrozen,
   reserveUpload,
   (req: Request, res: Response, next: NextFunction) => {

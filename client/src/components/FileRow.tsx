@@ -26,6 +26,9 @@ interface FileRowProps {
   selectable?: boolean;
   selected?: boolean;
   onToggleSelect?: (id: string) => void;
+  // When this file's uploader is restricted by you or blocked by the owner and
+  // is being revealed, surface why with a small badge.
+  flag?: "restricted" | "blocked" | null;
 }
 
 export function FileRow({
@@ -42,6 +45,7 @@ export function FileRow({
   selectable = false,
   selected = false,
   onToggleSelect,
+  flag = null,
 }: FileRowProps) {
   const showDelete = (canDelete ?? isYours) && !frozen;
   const uploading = progress !== undefined;
@@ -77,6 +81,12 @@ export function FileRow({
           <Badge variant={isYours ? "accent" : "neutral"}>
             {isYours ? "you" : uploaderName}
           </Badge>
+
+          {flag && (
+            <Badge variant={flag === "blocked" ? "danger" : "warn"}>
+              {flag}
+            </Badge>
+          )}
 
           {!uploading && (
             <span className="file_row_time">

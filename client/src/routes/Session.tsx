@@ -14,13 +14,13 @@ import {
   RiLockUnlockLine,
   RiDeleteBin6Line,
   RiDownloadLine,
-  RiEyeLine,
-  RiEyeOffLine,
+  RiFilter3Line,
   RiWifiOffLine,
   RiErrorWarningLine,
   RiStopCircleLine,
   RiPlayCircleLine,
   RiShieldFlashLine,
+  RiFlagLine,
 } from "react-icons/ri";
 import { useSession } from "../lib/use_session";
 import { useToast } from "../components/ui/Toast";
@@ -38,6 +38,7 @@ import { MemberRow } from "../components/MemberRow";
 import { FileRow } from "../components/FileRow";
 import { UploadDropzone } from "../components/UploadDropzone";
 import { KnockQueueModal } from "../components/KnockQueueModal";
+import { ReportsModal } from "../components/ReportsModal";
 import { InviteModal } from "../components/InviteModal";
 import { SendFileModal } from "../components/SendFileModal";
 import { IncomingTransferModal } from "../components/IncomingTransferModal";
@@ -63,12 +64,20 @@ export function Session() {
   );
   const [deleteUploadsTarget, setDeleteUploadsTarget] =
     useState<PublicMember | null>(null);
+  const [reportTarget, setReportTarget] = useState<PublicMember | null>(null);
+  const [reportReason, setReportReason] = useState("");
+  const [blockTarget, setBlockTarget] = useState<PublicMember | null>(null);
+  const [reportsOpen, setReportsOpen] = useState(false);
   const [confirmOrphaned, setConfirmOrphaned] = useState(false);
   const [confirmDeleteSelected, setConfirmDeleteSelected] = useState(false);
   const [confirmDownload, setConfirmDownload] = useState(false);
   const [zipName, setZipName] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [hideMine, setHideMine] = useState(false);
+  // Hide files from restricted/blocked uploaders. On by default; turn it off to
+  // reveal them.
+  const [hideRestricted, setHideRestricted] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [confirmOwnerLeave, setConfirmOwnerLeave] = useState(false);
   const [ownerTransferPick, setOwnerTransferPick] = useState(false);
@@ -85,10 +94,33 @@ export function Session() {
   ).length;
   const otherMembers = s.members.filter((m) => m.user_id !== s.yourUserId);
 
-  // Optionally hide your own uploads to focus on what others have shared.
-  const visibleBucket = hideMine
-    ? s.bucket.filter((e) => e.uploader_id !== s.yourUserId)
-    : s.bucket;
+  // Files from people you've restricted (viewer-local) and members the owner
+  // has blocked are hidden from the bucket by default. Your own uploads are
+  // never moderated away.
+  const blockedIds = new Set(
+    s.members.filter((m) => m.blocked).map((m) => m.user_id)
+  );
+  const moderatedFlag = (uid: string): "restricted" | "blocked" | null => {
+    if (uid === s.yourUserId) return null;
+    if (blockedIds.has(uid)) return "blocked";
+    if (s.restrictedUserIds.has(uid)) return "restricted";
+    return null;
+  };
+  const hiddenModeratedCount = s.bucket.filter(
+    (e) => moderatedFlag(e.uploader_id) !== null
+  ).length;
+
+  // Optionally hide your own uploads to focus on what others have shared, and
+  // (unless revealed) hide restricted/blocked uploaders' files.
+  const visibleBucket = s.bucket.filter((e) => {
+    if (hideMine && e.uploader_id === s.yourUserId) return false;
+    if (hideRestricted && moderatedFlag(e.uploader_id) !== null) return false;
+    return true;
+  });
+  // Files currently hidden by the view filters, surfaced on the filter trigger.
+  const hiddenCount = s.bucket.length - visibleBucket.length;
+  // The filter control only appears when there's something to filter.
+  const hasFilters = ownUploadCount > 0 || hiddenModeratedCount > 0;
 
   // Bucket multi-select (download for everyone; bulk delete is owner-only since
   // selected files may belong to different uploaders). Selection and select-all
@@ -123,6 +155,10 @@ export function Session() {
   }
   function toggleHideMine() {
     setHideMine((v) => !v);
+    setSelectedFiles(new Set());
+  }
+  function toggleHideRestricted() {
+    setHideRestricted((v) => !v);
     setSelectedFiles(new Set());
   }
 
@@ -317,6 +353,26 @@ export function Session() {
       )}
 
       {s.isOwner && (
+        <button
+          type="button"
+          className="session_bell"
+          aria-label={
+            s.reports.length > 0
+              ? `Reported members, ${s.reports.length} flagged`
+              : "Reported members"
+          }
+          aria-haspopup="dialog"
+          aria-expanded={reportsOpen}
+          onClick={() => setReportsOpen(true)}
+        >
+          <RiFlagLine size={18} />
+          {s.reports.length > 0 && (
+            <span className="session_bell_badge">{s.reports.length}</span>
+          )}
+        </button>
+      )}
+
+      {s.isOwner && (
         <Button
           size="sm"
           variant={s.frozen ? "secondary" : "danger"}
@@ -448,7 +504,7 @@ export function Session() {
           >
             <UploadDropzone
               onFiles={s.uploadFiles}
-              disabled={s.frozen}
+              disabled={s.frozen || s.youBlocked}
               encrypted={s.encryptionActive}
             />
 
@@ -495,27 +551,70 @@ export function Session() {
                       </span>
                     </label>
                     <div className="session_bucket_toolbar_actions">
-                      {ownUploadCount > 0 && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          icon={
-                            hideMine ? (
-                              <RiEyeLine size={16} />
-                            ) : (
-                              <RiEyeOffLine size={16} />
-                            )
+                      {hasFilters && (
+                        <Popover
+                          open={filtersOpen}
+                          onClose={() => setFiltersOpen(false)}
+                          label="Filter files"
+                          trigger={
+                            <span className="session_filter_wrap">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                icon={<RiFilter3Line size={16} />}
+                                aria-haspopup="dialog"
+                                aria-expanded={filtersOpen}
+                                aria-label="Filter files"
+                                className={hiddenCount > 0 ? "active" : undefined}
+                                title={
+                                  hiddenCount > 0
+                                    ? `${hiddenCount} file${
+                                        hiddenCount === 1 ? "" : "s"
+                                      } hidden`
+                                    : "Filter files"
+                                }
+                                onClick={() => setFiltersOpen((o) => !o)}
+                              >
+                                Filters
+                              </Button>
+                              {hiddenCount > 0 && (
+                                <span className="session_filter_badge">
+                                  {hiddenCount}
+                                </span>
+                              )}
+                            </span>
                           }
-                          aria-pressed={hideMine}
-                          aria-label={
-                            hideMine ? "Show my files" : "Hide my files"
-                          }
-                          className={hideMine ? "active" : undefined}
-                          title={hideMine ? "Show my files" : "Hide my files"}
-                          onClick={toggleHideMine}
                         >
-                          {hideMine ? "Show my files" : "Hide my files"}
-                        </Button>
+                          <div className="session_filter_menu" role="group">
+                            {ownUploadCount > 0 && (
+                              <label className="session_filter_item">
+                                <span>Hide my files</span>
+                                <input
+                                  type="checkbox"
+                                  role="switch"
+                                  className="session_switch"
+                                  checked={hideMine}
+                                  onChange={toggleHideMine}
+                                />
+                              </label>
+                            )}
+                            {hiddenModeratedCount > 0 && (
+                              <label className="session_filter_item">
+                                <span>
+                                  Hide restricted &amp; blocked (
+                                  {hiddenModeratedCount})
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  role="switch"
+                                  className="session_switch"
+                                  checked={hideRestricted}
+                                  onChange={toggleHideRestricted}
+                                />
+                              </label>
+                            )}
+                          </div>
+                        </Popover>
                       )}
                       {selectedCount > 0 && (
                         <>
@@ -568,18 +667,6 @@ export function Session() {
                       />
                     ))}
 
-                    {hideMine && (
-                      <p className="session_bucket_hint">
-                        <span>Your files are hidden. Click</span>
-                        <RiEyeLine
-                          size={16}
-                          onClick={toggleHideMine}
-                          title="Show my files"
-                          className="session_bucket_hint_eye"
-                        />
-                        <span>to see them again.</span>
-                      </p>
-                    )}
                     {visibleBucket.map((e) => (
                       <FileRow
                         key={e.id}
@@ -594,6 +681,7 @@ export function Session() {
                         selectable
                         selected={selectedFiles.has(e.id)}
                         onToggleSelect={toggleFile}
+                        flag={moderatedFlag(e.uploader_id)}
                       />
                     ))}
                   </ul>
@@ -619,10 +707,20 @@ export function Session() {
                     member={m}
                     isYou={m.user_id === s.yourUserId}
                     viewerIsOwner={s.isOwner}
+                    restricted={s.restrictedUserIds.has(m.user_id)}
+                    viewerBlocked={s.youBlocked}
                     onSend={setSendTarget}
                     onKick={setKickTarget}
                     onMakeOwner={setMakeOwnerTarget}
                     onDeleteUploads={setDeleteUploadsTarget}
+                    onRestrict={(member, restrict) =>
+                      s.restrictMember(member.user_id, restrict)
+                    }
+                    onReport={setReportTarget}
+                    onBlock={(member, blocked) => {
+                      if (blocked) setBlockTarget(member);
+                      else s.blockMember(member.user_id, false);
+                    }}
                     frozen={s.frozen}
                   />
                 ))}
@@ -662,6 +760,25 @@ export function Session() {
           paused={s.knockingPaused}
           onAdmit={s.admit}
           onReject={s.reject}
+        />
+      )}
+
+      {s.isOwner && (
+        <ReportsModal
+          open={reportsOpen}
+          onClose={() => setReportsOpen(false)}
+          reports={s.reports}
+          blockedIds={
+            new Set(s.members.filter((m) => m.blocked).map((m) => m.user_id))
+          }
+          presentIds={memberIds}
+          onBlock={(user_id, blocked) => s.blockMember(user_id, blocked)}
+          onKick={(r) => {
+            setReportsOpen(false);
+            const member = s.members.find((m) => m.user_id === r.user_id);
+            if (member) setKickTarget(member);
+          }}
+          onIgnore={(user_id) => s.dismissReport(user_id)}
         />
       )}
 
@@ -787,6 +904,79 @@ export function Session() {
       >
         Every file this member uploaded will be removed from the bucket for
         everyone.
+      </Modal>
+
+      <Modal
+        open={!!reportTarget}
+        onClose={() => {
+          setReportTarget(null);
+          setReportReason("");
+        }}
+        title={`Report ${reportTarget?.display_name}?`}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setReportTarget(null);
+                setReportReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (reportTarget)
+                  s.reportMember(
+                    reportTarget.user_id,
+                    reportReason.trim() || undefined
+                  );
+                setReportTarget(null);
+                setReportReason("");
+              }}
+            >
+              Report
+            </Button>
+          </>
+        }
+      >
+        <p className="session_report_note">
+          They’ll be flagged for the owner and you’ll stop receiving files from
+          them. You can undo this from their menu (“Unrestrict”).
+        </p>
+        <Input
+          label="Reason (optional)"
+          placeholder="What happened?"
+          value={reportReason}
+          maxLength={500}
+          onChange={(e) => setReportReason(e.target.value)}
+        />
+      </Modal>
+
+      <Modal
+        open={!!blockTarget}
+        onClose={() => setBlockTarget(null)}
+        title={`Block ${blockTarget?.display_name}?`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setBlockTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (blockTarget) s.blockMember(blockTarget.user_id, true);
+                setBlockTarget(null);
+              }}
+            >
+              Block
+            </Button>
+          </>
+        }
+      >
+        They won’t be able to send files to anyone or upload to the shared
+        bucket. They can still receive and download. You can unblock them later.
       </Modal>
 
       <Modal

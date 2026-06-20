@@ -1,5 +1,5 @@
 import { io, type Socket } from "socket.io-client";
-import type { PublicMember, PublicBucketEntry } from "./api";
+import type { PublicMember, PublicBucketEntry, PublicReport } from "./api";
 
 export interface TransferFileMeta {
   name: string;
@@ -16,6 +16,10 @@ export interface ServerToClient {
     members: PublicMember[];
     bucket: PublicBucketEntry[];
     owner_grace_ms: number | null;
+    // Caller's personal restrict list (user_ids they won't receive from).
+    your_restricted: string[];
+    // Reports queue; populated only when the caller is the owner.
+    reports: PublicReport[];
   }) => void;
   "members:list": (p: { members: PublicMember[] }) => void;
   "member:joined": (p: { member: PublicMember }) => void;
@@ -90,6 +94,9 @@ export interface ServerToClient {
     candidate: RTCIceCandidateInit;
   }) => void;
   "session:ended": (p: { reason: string }) => void;
+  // Moderation. The caller's own restrict list, and the owner-only reports queue.
+  "member:restricted": (p: { restricted_user_ids: string[] }) => void;
+  "reports:list": (p: { reports: PublicReport[] }) => void;
   // E2EE key exchange (server relays only; never sees the content key).
   "e2ee:request_key": (p: { from_user_id: string; pubkey: string }) => void;
   "e2ee:key": (p: {
@@ -111,6 +118,11 @@ export interface ClientToServer {
   transfer_ownership: (p: { to_user_id: string }) => void;
   owner_accept: () => void;
   owner_decline: () => void;
+  // Moderation.
+  "member:restrict": (p: { user_id: string; restrict: boolean }) => void;
+  "member:report": (p: { user_id: string; reason?: string }) => void;
+  "member:block": (p: { user_id: string; blocked: boolean }) => void;
+  "report:dismiss": (p: { user_id: string }) => void;
   "transfer:request": (p: {
     to_user_id: string;
     files: TransferFileMeta[];
