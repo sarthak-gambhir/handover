@@ -15,8 +15,8 @@
 
 .member_row_identity {
   display: flex;
-  align-items: baseline;
-  gap: var(--space_1);
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
   flex: 1;
 }
@@ -29,9 +29,9 @@
 
 .member_row_tag {
   @include m.mono_text;
+  @include m.truncate;
   font-size: 11px;
   color: var(--fg_subtle);
-  flex-shrink: 0;
 }
 
 .member_row_badges {

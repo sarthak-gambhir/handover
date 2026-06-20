@@ -40,6 +40,7 @@ export interface Snapshot {
   owner_user_id: string;
   knocking_paused: boolean;
   frozen: boolean;
+  read_only: boolean;
   you: PublicMember;
   members: PublicMember[];
   bucket: PublicBucketEntry[];
@@ -76,10 +77,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  createSession(display_name: string) {
+  createSession(display_name: string, read_only = false) {
     return request<{ slug: string; owner_user_id: string }>("/api/sessions", {
       method: "POST",
-      body: JSON.stringify({ display_name }),
+      body: JSON.stringify({ display_name, read_only }),
     });
   },
 

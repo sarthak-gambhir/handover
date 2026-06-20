@@ -11,6 +11,7 @@ import {
   RiP2pLine,
   RiShieldCheckLine,
   RiLockLine,
+  RiEyeLine,
 } from "react-icons/ri";
 import { Page } from "../components/ui/Page";
 import { BrandMark } from "../components/ui/BrandMark";
@@ -39,6 +40,7 @@ export function Home() {
   const [slug, setSlug] = useState(prefillSlug);
   const [name, setName] = useState("");
   const [ownerName, setOwnerName] = useState("");
+  const [readOnly, setReadOnly] = useState(false);
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
@@ -49,8 +51,10 @@ export function Home() {
     }
     setCreating(true);
     try {
-      const { slug: newSlug, owner_user_id } =
-        await api.createSession(cleanOwnerName);
+      const { slug: newSlug, owner_user_id } = await api.createSession(
+        cleanOwnerName,
+        readOnly
+      );
       sessionStore.set({
         slug: newSlug,
         user_id: owner_user_id,
@@ -162,6 +166,24 @@ export function Home() {
                     maxLength={32}
                     autoComplete="off"
                   />
+                  <label className="home_readonly">
+                    <span className="home_readonly_text">
+                      <span className="home_readonly_label">
+                        <RiEyeLine size={16} />
+                        Read-only session
+                      </span>
+                      <span className="home_readonly_hint">
+                        Only you can share files; everyone else can download.
+                      </span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      className="home_switch"
+                      checked={readOnly}
+                      onChange={(e) => setReadOnly(e.target.checked)}
+                    />
+                  </label>
                   <Button
                     type="submit"
                     loading={creating}

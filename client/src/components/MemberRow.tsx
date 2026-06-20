@@ -16,6 +16,9 @@ interface MemberRowProps {
   restricted?: boolean;
   // Whether the viewer themselves has been blocked by the owner (can't send).
   viewerBlocked?: boolean;
+  // Whether sending is locked for the viewer because the session is read-only
+  // and they're not the owner.
+  sendLocked?: boolean;
   onSend: (member: PublicMember) => void;
   onKick: (member: PublicMember) => void;
   onMakeOwner: (member: PublicMember) => void;
@@ -33,6 +36,7 @@ export function MemberRow({
   viewerIsOwner,
   restricted = false,
   viewerBlocked = false,
+  sendLocked = false,
   onSend,
   onKick,
   onMakeOwner,
@@ -99,33 +103,31 @@ export function MemberRow({
       <PresenceDot online={member.online} />
       <div className="member_row_identity">
         <span className="member_row_name">{member.display_name}</span>
-        {!isYou && (
-          <span className="member_row_tag">· {shortId(member.user_id)}</span>
-        )}
+        <span className="member_row_tag">({shortId(member.user_id)})</span>
       </div>
       <div className="member_row_badges">
         {isYou && <Badge variant="accent">you</Badge>}
-        {member.is_owner && <Badge variant="neutral">owner</Badge>}
+        {member.is_owner && <Badge variant="success">owner</Badge>}
         {member.blocked && <Badge variant="danger">blocked</Badge>}
         {!isYou && restricted && <Badge variant="warn">restricted</Badge>}
       </div>
       {!isYou && (
         <div className="member_row_actions">
-          <Button
-            size="sm"
-            variant="ghost"
-            icon={<RiSendPlane2Line size={16} />}
-            disabled={!canSend || frozen || viewerBlocked}
-            title={
-              viewerBlocked
-                ? "The owner has blocked you from sending files"
-                : undefined
-            }
-            onClick={() => onSend(member)}
-            aria-label={`Send file to ${member.display_name}`}
-          >
-            Send
-          </Button>
+          {/* Sending is hidden (not just disabled) while the session is frozen,
+              when the owner has blocked the viewer, or in a read-only session
+              where the viewer isn't the owner. */}
+          {!(frozen || viewerBlocked || sendLocked) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<RiSendPlane2Line size={16} />}
+              disabled={!canSend}
+              onClick={() => onSend(member)}
+              aria-label={`Send file to ${member.display_name}`}
+            >
+              Send
+            </Button>
+          )}
           {showMenu && (
             <div className="member_row_menu_wrap" ref={menuWrapRef}>
               <Button

@@ -76,6 +76,16 @@ function blockIfMuted(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
+// In read-only mode only the owner may upload to the bucket. Must run after
+// requireMember so req.session/req.member are populated.
+function blockIfReadOnly(req: Request, res: Response, next: NextFunction): void {
+  if (req.session?.read_only && !req.member?.is_owner) {
+    res.status(403).json({ error: "read_only" });
+    return;
+  }
+  next();
+}
+
 // ---- upload reservation lifecycle ---------------------------------------
 
 interface Reservation {
@@ -139,7 +149,8 @@ router.post("/sessions", createLimiter, (req: Request, res: Response) => {
     return;
   }
   const { session, ownerToken, ownerUserId } = store.createSession(
-    parsed.data.display_name
+    parsed.data.display_name,
+    parsed.data.read_only ?? false
   );
   setSessionCookie(res, session.slug, ownerToken, config.memberCookieMaxAgeS);
   res.status(201).json({ slug: session.slug, owner_user_id: ownerUserId });
@@ -325,6 +336,7 @@ router.get("/sessions/:slug", requireMember, (req: Request, res: Response) => {
     owner_user_id: session.owner_user_id,
     knocking_paused: session.knocking_paused,
     frozen: session.frozen,
+    read_only: session.read_only,
     you: store.publicMember(req.member!),
     members: store.publicMembers(session),
     bucket: store.publicBucket(session),
@@ -337,6 +349,7 @@ router.post(
   "/sessions/:slug/files",
   requireMember,
   blockIfMuted,
+  blockIfReadOnly,
   blockIfFrozen,
   reserveUpload,
   (req: Request, res: Response, next: NextFunction) => {

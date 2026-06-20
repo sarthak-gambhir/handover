@@ -284,6 +284,20 @@
   font-weight: 500;
 }
 
+.session_readonly_banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space_2);
+  padding: var(--space_2) var(--space_3);
+  background: var(--accent_soft);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-radius: var(--radius_md);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
 // Halt/Resume control: icon-only on small screens, with label once there's room.
 .session_action_freeze {
   .button_label {
@@ -318,7 +332,7 @@
 .session_encrypted_label {
   display: none;
 
-  @include m.md_up {
+  @include m.sm_up {
     display: inline;
   }
 }

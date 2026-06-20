@@ -21,6 +21,8 @@ import {
   RiPlayCircleLine,
   RiShieldFlashLine,
   RiFlagLine,
+  RiEyeLine,
+  RiEyeOffLine,
 } from "react-icons/ri";
 import { useSession } from "../lib/use_session";
 import { useToast } from "../components/ui/Toast";
@@ -271,7 +273,7 @@ export function Session() {
     </button>
   );
 
-  const ownerBadge = s.isOwner ? <Badge variant="accent">owner</Badge> : null;
+  const ownerBadge = s.isOwner ? <Badge variant="success">owner</Badge> : null;
 
   const ownerMenu = s.isOwner ? (
     <Popover
@@ -311,6 +313,22 @@ export function Session() {
             <RiLockLine size={16} />
           )}
           {s.knockingPaused ? "Resume knocking" : "Pause knocking"}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          className="session_menu_item"
+          disabled={s.frozen}
+          title={
+            s.frozen ? "Unfreeze the session to change read-only" : undefined
+          }
+          onClick={() => {
+            setMenuOpen(false);
+            s.setReadOnly(!s.readOnly);
+          }}
+        >
+          {s.readOnly ? <RiEyeLine size={16} /> : <RiEyeOffLine size={16} />}
+          {s.readOnly ? "Turn off read-only" : "Make read-only"}
         </button>
         <button
           type="button"
@@ -442,6 +460,19 @@ export function Session() {
           </div>
         )}
 
+        {s.readOnly && !s.frozen && (
+          <div
+            className="session_readonly_banner"
+            role="status"
+            aria-live="polite"
+          >
+            <RiEyeLine size={16} />
+            {s.isOwner
+              ? "Read-only mode — only you can share files; others can download."
+              : "Read-only session — only the owner can share files. You can download what's shared."}
+          </div>
+        )}
+
         <div className="session_meta">
           {slugChip}
           {s.isOwner && (
@@ -502,11 +533,12 @@ export function Session() {
               ) : undefined
             }
           >
-            <UploadDropzone
-              onFiles={s.uploadFiles}
-              disabled={s.frozen || s.youBlocked}
-              encrypted={s.encryptionActive}
-            />
+            {!(s.frozen || s.shareLocked || s.youBlocked) && (
+              <UploadDropzone
+                onFiles={s.uploadFiles}
+                encrypted={s.encryptionActive}
+              />
+            )}
 
             {filesEmpty ? (
               <div className="session_empty">
@@ -526,6 +558,11 @@ export function Session() {
                       share with everyone.
                     </p>
                   </>
+                ) : s.shareLocked ? (
+                  <p className="session_empty_help">
+                    This is a read-only session — only the owner can add files.
+                    Anything shared will appear here for you to download.
+                  </p>
                 ) : (
                   <p className="session_empty_help">
                     Drop a file above to share it with everyone in the session.
@@ -551,6 +588,38 @@ export function Session() {
                       </span>
                     </label>
                     <div className="session_bucket_toolbar_actions">
+                      {selectedCount > 0 && (
+                        <>
+                          {s.isOwner && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="session_bucket_delete"
+                              icon={<RiDeleteBin6Line size={16} />}
+                              disabled={s.frozen}
+                              aria-label="Delete selected files"
+                              title="Delete selected files"
+                              onClick={() => setConfirmDeleteSelected(true)}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<RiDownloadLine size={16} />}
+                            disabled={s.frozen}
+                            aria-label="Download selected files"
+                            title="Download selected files"
+                            onClick={() => {
+                              setZipName(`handover-${cleanSlug}`);
+                              setConfirmDownload(true);
+                            }}
+                          >
+                            Download
+                          </Button>
+                        </>
+                      )}
                       {hasFilters && (
                         <Popover
                           open={filtersOpen}
@@ -616,38 +685,6 @@ export function Session() {
                           </div>
                         </Popover>
                       )}
-                      {selectedCount > 0 && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            icon={<RiDownloadLine size={16} />}
-                            disabled={s.frozen}
-                            aria-label="Download selected files"
-                            title="Download selected files"
-                            onClick={() => {
-                              setZipName(`handover-${cleanSlug}`);
-                              setConfirmDownload(true);
-                            }}
-                          >
-                            Download
-                          </Button>
-                          {s.isOwner && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="session_bucket_delete"
-                              icon={<RiDeleteBin6Line size={16} />}
-                              disabled={s.frozen}
-                              aria-label="Delete selected files"
-                              title="Delete selected files"
-                              onClick={() => setConfirmDeleteSelected(true)}
-                            >
-                              Delete
-                            </Button>
-                          )}
-                        </>
-                      )}
                     </div>
                   </div>
                 )}
@@ -709,6 +746,7 @@ export function Session() {
                     viewerIsOwner={s.isOwner}
                     restricted={s.restrictedUserIds.has(m.user_id)}
                     viewerBlocked={s.youBlocked}
+                    sendLocked={s.shareLocked}
                     onSend={setSendTarget}
                     onKick={setKickTarget}
                     onMakeOwner={setMakeOwnerTarget}

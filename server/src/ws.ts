@@ -201,6 +201,9 @@ export function registerWs(io: Server): void {
     socket.on("session:set_frozen", (p: { frozen?: boolean }) =>
       handleSetFrozen(io, socket, p)
     );
+    socket.on("session:set_read_only", (p: { read_only?: boolean }) =>
+      handleSetReadOnly(io, socket, p)
+    );
     socket.on("transfer_ownership", (p: { to_user_id?: string }) =>
       handleOwnershipOffer(io, socket, p)
     );
@@ -399,6 +402,7 @@ function handleIdentify(
     owner_user_id: session.owner_user_id,
     knocking_paused: session.knocking_paused,
     frozen: session.frozen,
+    read_only: session.read_only,
     members: store.publicMembers(session),
     bucket: store.publicBucket(session),
     owner_grace_ms,
@@ -837,6 +841,38 @@ function handleSetFrozen(
   }
 }
 
+// ---- owner: read-only mode -------------------------------------------------
+
+function handleSetReadOnly(
+  io: Server,
+  socket: AppSocket,
+  p: { read_only?: boolean }
+): void {
+  const ctx = getOwnerContext(socket);
+  if (!ctx) {
+    denyOwnerAction(socket);
+    return;
+  }
+  const { session } = ctx;
+  const next = Boolean(p.read_only);
+  const wasReadOnly = session.read_only;
+  session.read_only = next;
+  store.touch(session);
+  io.to(room(session.slug)).emit("session:read_only", { read_only: next });
+
+  // Enabling read-only revokes non-owner sending: cancel any in-flight transfer
+  // whose sender is not the owner. Transfers the owner originated are kept.
+  if (next && !wasReadOnly) {
+    cancelTransfersWhere(
+      io,
+      session,
+      ctx.owner.user_id,
+      "read_only",
+      (t) => t.from_user_id !== session.owner_user_id
+    );
+  }
+}
+
 // ---- owner: transfer ownership ---------------------------------------------
 
 function handleOwnershipOffer(
@@ -977,6 +1013,14 @@ function handleTransferRequest(
     socket.emit("error", {
       code: "sender_restricted",
       message: "This member isn't accepting files from you.",
+    });
+    return;
+  }
+  // Read-only sessions: only the owner may send files.
+  if (session.read_only && user_id !== session.owner_user_id) {
+    socket.emit("error", {
+      code: "read_only",
+      message: "Only the owner can send files in this session.",
     });
     return;
   }

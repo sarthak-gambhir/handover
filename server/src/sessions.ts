@@ -60,7 +60,10 @@ export class Store extends EventEmitter {
 
   // ---- session lifecycle -------------------------------------------------
 
-  createSession(displayName = "Owner"): {
+  createSession(
+    displayName = "Owner",
+    readOnly = false
+  ): {
     session: Session;
     ownerToken: string;
     ownerUserId: string;
@@ -99,6 +102,7 @@ export class Store extends EventEmitter {
       owner_grace_timer: null,
       knocking_paused: false,
       frozen: false,
+      read_only: readOnly,
       pending_owner_offer: null,
     };
 

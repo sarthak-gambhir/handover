@@ -98,6 +98,10 @@ export type Session = {
   // read-only snapshot: uploads/downloads/deletes/transfers/knock admit are all
   // rejected and in-flight transfers are cancelled.
   frozen: boolean;
+  // Read-only mode (set at creation, owner-toggleable). When true only the
+  // owner may upload to the bucket or P2P-send files; other members can still
+  // download from the bucket and receive transfers the owner sends them.
+  read_only: boolean;
   // Outstanding ownership offer; only the named member may accept it, and only
   // while it has not expired. Null when no offer is in flight.
   pending_owner_offer: {

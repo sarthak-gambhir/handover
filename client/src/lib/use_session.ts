@@ -40,6 +40,7 @@ export function useSession(slug: string) {
   const [knockers, setKnockers] = useState<Knock[]>([]);
   const [knockingPaused, setKnockingPaused] = useState(false);
   const [frozen, setFrozenState] = useState(false);
+  const [readOnly, setReadOnlyState] = useState(false);
   const [inviteUsed, setInviteUsed] = useState<{
     code: string;
     at: number;
@@ -116,11 +117,21 @@ export function useSession(slug: string) {
   const youBlocked = members.some(
     (m) => m.user_id === yourUserId && !!m.blocked
   );
+  // In a read-only session every non-owner is barred from sharing (uploads and
+  // P2P sends). The owner shares normally; everyone can still download/receive.
+  const shareLocked = readOnly && !isOwner;
 
   // While frozen the session is read-only; refuse mutating actions client-side
   // (the server also rejects them with 423/session_frozen as a backstop).
   const uploadFiles = useCallback(
     (files: File[]) => {
+      if (shareLocked) {
+        toast(
+          "Only the owner can share files in this read-only session.",
+          "warn"
+        );
+        return;
+      }
       if (frozen) {
         toast("Session is frozen — uploads are paused.", "warn");
         return;
@@ -138,7 +149,7 @@ export function useSession(slug: string) {
       }
       rawUploadFiles(files);
     },
-    [frozen, youBlocked, keyReady, rawUploadFiles, toast]
+    [shareLocked, frozen, youBlocked, keyReady, rawUploadFiles, toast]
   );
   const deleteFile = useCallback(
     async (id: string) => {
@@ -389,6 +400,7 @@ export function useSession(slug: string) {
       setOwnerUserId(p.owner_user_id);
       setKnockingPaused(p.knocking_paused);
       setFrozenState(p.frozen);
+      setReadOnlyState(p.read_only);
       setMembers(p.members);
       setBucket(p.bucket);
       setRestrictedUserIds(new Set(p.your_restricted));
@@ -466,6 +478,7 @@ export function useSession(slug: string) {
     );
     socket.on("knocking:paused", (p) => setKnockingPaused(p.paused));
     socket.on("session:frozen", (p) => setFrozenState(p.frozen));
+    socket.on("session:read_only", (p) => setReadOnlyState(p.read_only));
     socket.on("member:restricted", (p) =>
       setRestrictedUserIds(new Set(p.restricted_user_ids))
     );
@@ -657,6 +670,11 @@ export function useSession(slug: string) {
         toast("The owner has blocked you from sending files.", "danger");
       } else if (e.code === "sender_restricted") {
         toast("This member isn't accepting files from you.", "warn");
+      } else if (e.code === "read_only") {
+        toast(
+          "Only the owner can share files in this read-only session.",
+          "warn"
+        );
       }
     });
 
@@ -693,6 +711,13 @@ export function useSession(slug: string) {
     (recipient: PublicMember, files: File[]) => {
       const socket = socketRef.current;
       if (!socket) return;
+      if (shareLocked) {
+        toast(
+          "Only the owner can share files in this read-only session.",
+          "warn"
+        );
+        return;
+      }
       if (frozen) {
         toast("Session is frozen — transfers are paused.", "warn");
         return;
@@ -727,7 +752,7 @@ export function useSession(slug: string) {
         client_ref: key,
       });
     },
-    [frozen, youBlocked, toast]
+    [shareLocked, frozen, youBlocked, toast]
   );
 
   const acceptIncoming = useCallback(
@@ -881,6 +906,11 @@ export function useSession(slug: string) {
   const setFrozen = useCallback(
     (next: boolean) =>
       socketRef.current?.emit("session:set_frozen", { frozen: next }),
+    []
+  );
+  const setReadOnly = useCallback(
+    (next: boolean) =>
+      socketRef.current?.emit("session:set_read_only", { read_only: next }),
     []
   );
   const deleteOrphanedFiles = useCallback(async () => {
@@ -1117,6 +1147,8 @@ export function useSession(slug: string) {
     knockers,
     knockingPaused,
     frozen,
+    readOnly,
+    shareLocked,
     inviteUsed,
     yourUserId,
     ownerUserId,
@@ -1157,6 +1189,7 @@ export function useSession(slug: string) {
     dismissReport,
     setPaused,
     setFrozen,
+    setReadOnly,
     deleteOrphanedFiles,
     deleteMemberFiles,
     deleteOwnUploads,

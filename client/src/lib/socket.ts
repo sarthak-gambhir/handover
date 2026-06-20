@@ -13,6 +13,7 @@ export interface ServerToClient {
     owner_user_id: string;
     knocking_paused: boolean;
     frozen: boolean;
+    read_only: boolean;
     members: PublicMember[];
     bucket: PublicBucketEntry[];
     owner_grace_ms: number | null;
@@ -41,6 +42,7 @@ export interface ServerToClient {
   }) => void;
   "knocking:paused": (p: { paused: boolean }) => void;
   "session:frozen": (p: { frozen: boolean }) => void;
+  "session:read_only": (p: { read_only: boolean }) => void;
   waiting: (p: { knock_id: string }) => void;
   admitted: (p: {
     user_id: string;
@@ -115,6 +117,7 @@ export interface ClientToServer {
   kick: (p: { user_id: string }) => void;
   "knocking:set_paused": (p: { paused: boolean }) => void;
   "session:set_frozen": (p: { frozen: boolean }) => void;
+  "session:set_read_only": (p: { read_only: boolean }) => void;
   transfer_ownership: (p: { to_user_id: string }) => void;
   owner_accept: () => void;
   owner_decline: () => void;

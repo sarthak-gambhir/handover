@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cx } from "../../lib/cx";
 import "./Badge.scss";
 
-type BadgeVariant = "accent" | "neutral" | "warn" | "danger";
+type BadgeVariant = "accent" | "neutral" | "warn" | "danger" | "success";
 
 export function Badge({
   variant = "neutral",
