@@ -12,10 +12,12 @@ cp server/.env.example server/.env   # optional; sensible defaults otherwise
 npm run dev
 ```
 
-- Client dev server: [http://localhost:5173](http://localhost:5173)
-- API + WebSocket server: [http://localhost:3000](http://localhost:3000) (proxied under `/api` in dev)
+- Client dev server: `https://localhost:5173`
+- API + WebSocket server: `http://localhost:3000` (proxied under `/api` in dev)
 
-Dev ports/hosts are configurable: server via `PORT`/`HOST` in `server/.env`, and the Vite dev server via `CLIENT_PORT`/`CLIENT_HOST`/`API_TARGET` in `client/.env` (see `client/.env.example`).
+The Vite dev server runs over **HTTPS** with a self-signed certificate (via `@vitejs/plugin-basic-ssl`) so that a LAN IP counts as a secure context — this keeps the auth cookie and WebCrypto (E2EE) working off `localhost`. Your browser will warn about the self-signed cert the first time; accept it to proceed. Only the browser↔Vite leg is TLS; Vite proxies `/api` to the backend over plain HTTP.
+
+Dev ports/hosts are configurable: server via `PORT`/`HOST` in `server/.env`, and the Vite dev server via `CLIENT_PORT`/`CLIENT_HOST`/`API_TARGET` in `client/.env` (see `client/.env.example`). The proxy target defaults to `http://localhost:${SERVER_PORT}`; if the dev proxy reports `ECONNREFUSED`, make sure the server is running and that `SERVER_PORT`/`API_TARGET` match the server's `PORT` (on some setups you may need `API_TARGET=http://127.0.0.1:<port>` to force IPv4).
 
 Open the client, click **Create new session**, share the slug, and have a second browser **Knock** to join. As the owner you’ll see the knock in your queue and can admit them.
 
@@ -24,9 +26,15 @@ Open the client, click **Create new session**, share the slug, and have a second
 - **Sessions** are identified by a human-readable slug (e.g. `purple-otter-77`) and exist only in server memory.
 - **Auth** is cookie-based: each session sets an HttpOnly, Secure, SameSite=Strict `st_<slug>` cookie scoped to `/api`. There are no passwords and no tokens in JS-readable storage. The cookie is refreshed on every authenticated request (sliding window).
 - **Admission**: the owner enters a display name when creating a session; non-owners knock with a display name and wait. The owner admits or rejects from the knock queue, and can pause new knocks.
-- **Shared bucket**: files uploaded here pass through the server, are held in memory (subject to caps), and are visible to all members. Uploaders can delete their own files, and the **owner can delete any file**. When a member leaves, their uploads are **kept** (orphaned) so others don't lose shared content; the owner can remove a single member's uploads, or clear all orphaned files at once. Kicked members' files are still auto-removed.
+- **Invite links**: the owner can mint **single-use** invite links (default TTL 30 min, capped at 10 live per session). Redeeming one with a display name **joins the session directly, bypassing the knock queue**; the code is consumed on use and the owner is notified. Codes can be revoked by the owner and are pruned on expiry. Invites are refused while the session is frozen.
+- **Shared bucket**: files uploaded here pass through the server, are held in memory (subject to caps), and are visible to all members. Bucket files are **end-to-end encrypted** — the content key is wrapped per-member to each member's published ECDH public key, so the server stores only ciphertext and never holds the symmetric key. Uploaders can delete their own files, and the **owner can delete any file**. When a member leaves, their uploads are **kept** (orphaned) so others don't lose shared content; the owner can remove a single member's uploads, or clear all orphaned files at once. Kicked members' files are still auto-removed.
 - **Direct send (P2P)**: a member sends files straight to another member over an encrypted WebRTC data channel. The server only relays SDP/ICE signaling and never sees file bytes. Transfers use a manifest + framed-chunk protocol with backpressure, and stream to disk via the File System Access API where available.
-- **Cleanup**: a sweeper expires idle sessions (60 min), un-admitted knocks (5 min), gives a disconnected owner a 60 s grace period, and cancels in-flight transfers when a peer leaves. Leaving with files in the bucket prompts you to delete them or keep them for the others.
+- **Read-only mode**: set at creation and live-toggleable by the owner. While on, only the owner may upload to the bucket or P2P-send; other members can still download from the bucket and receive transfers the owner sends them. Enforced server-side on uploads and transfer requests.
+- **Moderation**: the owner can **kick** a member (removed immediately, their uploads purged) or **block** them (barred from uploading and from P2P-sending to anyone, but still able to download/receive — reversible). Independently, any member can personally **restrict** another, refusing to receive P2P transfers from them (owner-independent). Members can also **report** another member; reports are queued for the owner's eyes only.
+- **Activity log**: a per-session in-memory audit log (ring buffer, capped) records uploads, downloads, deletes, transfer outcomes, joins/leaves, and moderation events. Visibility is filtered per viewer: uploads/deletes/joins/leaves/kick/block/unblock are visible to everyone; downloads and transfers only to the actor and target; reports, restrict, and unrestrict are actor-only (the target is kept unaware). The owner sees everything.
+- **Ownership transfer**: the owner can offer ownership to another member. The offer must be accepted by that named member and expires if ignored; on acceptance, badges and controls update for both parties.
+- **Freeze ("session compromised")**: the owner can freeze the session into a read-only snapshot — uploads, downloads, deletes, transfers, and knock admissions are all rejected and in-flight transfers are cancelled.
+- **Cleanup**: a sweeper expires idle sessions (60 min), un-admitted knocks (5 min) and invite codes (30 min), gives a disconnected owner a 60 s grace period, and cancels in-flight transfers when a peer leaves. Leaving with files in the bucket prompts you to delete them or keep them for the others.
 
 ## Scripts
 
@@ -76,6 +84,7 @@ All server config is optional and has defaults (see `server/.env.example`).
 ## Security model
 
 - HttpOnly + Secure + SameSite=Strict per-session cookies scoped to `/api`; no credentials in `localStorage`/JS.
+- Shared-bucket files are **end-to-end encrypted**: the content key is wrapped to each member's published ECDH public key client-side, so the server stores only ciphertext and never sees the symmetric key. P2P sends are likewise encrypted over the WebRTC data channel and never touch the server.
 - `helmet` with a strict Content Security Policy (`script-src 'self'`, `style-src 'self'`), HSTS in production.
 - CORS limited to `CLIENT_ORIGIN`; one active tab per session is enforced over the socket.
 - Uploaded filenames are canonicalized server-side (lowercased, kebab-cased, restricted character set); display names are validated (length, no control/bidi/zero-width characters).
@@ -97,6 +106,7 @@ All server config is optional and has defaults (see `server/.env.example`).
 - [ ] Knock from a second browser; the owner sees it in the knock queue.
 - [ ] Admit the knocker; they move from the waiting room into the session.
 - [ ] Reject a knocker; they’re returned to home with a message.
+- [ ] Mint an invite link; redeeming it with a name joins the session directly (no knock), and the owner is notified. Re-using the same link a second time fails (single-use), and a revoked or expired link is rejected.
 - [ ] Pause knocking; new knocks are refused with a clear message.
 - [ ] Owner closes the tab; after the 60 s grace period the session ends for everyone.
 - [ ] Leave idle for the idle timeout; the session ends.
@@ -112,12 +122,25 @@ All server config is optional and has defaults (see `server/.env.example`).
 ### Owner controls
 
 - [ ] Kick a member; they’re removed immediately and their uploaded files vanish for everyone.
+- [ ] Block a member; they can no longer upload or P2P-send (a “blocked” badge shows for everyone) but can still download/receive. Unblock restores their abilities.
 - [ ] As owner, delete a file uploaded by someone else; it disappears for everyone.
 - [ ] As owner, use a member’s menu → “Delete all uploads”; all of that member’s files are removed.
 - [ ] After a member leaves with files, the owner sees “Delete orphaned (N)”; clicking it clears the left-behind files.
 - [ ] Leave as a non-owner with files in the bucket; you’re prompted to delete them or keep them. “Keep & leave” leaves them as orphaned.
 - [ ] Transfer ownership; the target must accept, then badges/controls update for both.
 - [ ] Decline an ownership offer; the original owner is notified.
+
+### Read-only & freeze
+
+- [ ] Create a session in read-only mode; non-owners see no dropzone or Send button and cannot upload/P2P-send. The owner still can.
+- [ ] Toggle read-only on/off live as owner; other members’ upload/send controls appear and disappear accordingly.
+- [ ] Freeze the session ("compromised"); uploads, downloads, deletes, transfers, and knock admissions are all rejected, and any in-flight transfer is cancelled.
+
+### Moderation & activity
+
+- [ ] Personally restrict another member; transfers they direct at you are refused, while other members are unaffected.
+- [ ] Report a member; the report appears in the owner’s queue only (other members, including the reported one, see nothing).
+- [ ] As a non-owner, confirm the activity feed hides others’ downloads/transfers and never shows report/restrict/unrestrict entries; as owner, confirm you see the full log.
 
 ### P2P direct send
 
