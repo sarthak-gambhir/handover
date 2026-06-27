@@ -116,7 +116,7 @@ export interface ServerToClient {
     wrapped: string;
     iv: string;
   }) => void;
-  error: (p: { code: string; message: string }) => void;
+  error: (p: { code: string; message: string; client_ref?: string }) => void;
 }
 
 export interface ClientToServer {

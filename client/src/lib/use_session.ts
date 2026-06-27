@@ -680,15 +680,42 @@ export function useSession(slug: string) {
         socket.disconnect();
       } else if (e.code === "sender_blocked") {
         toast("The owner has blocked you from sending files.", "danger");
+        cleanupTransfer(e);
       } else if (e.code === "sender_restricted") {
         toast("This member isn't accepting files from you.", "warn");
+        cleanupTransfer(e);
       } else if (e.code === "read_only") {
         toast(
           "Only the owner can share files in this read-only session.",
           "warn"
         );
+        cleanupTransfer(e);
+      } else if (e.code === "invalid_target") {
+        toast("Cannot send to yourself.", "warn");
+        cleanupTransfer(e);
+      } else if (e.code === "recipient_unavailable") {
+        toast("Recipient is offline.", "warn");
+        cleanupTransfer(e);
+      } else if (e.code === "invalid_files") {
+        toast("Invalid files for transfer.", "warn");
+        cleanupTransfer(e);
+      } else if (e.code === "rate_limited") {
+        toast("Too many transfer requests. Please wait.", "warn");
+        cleanupTransfer(e);
       }
     });
+
+    function cleanupTransfer(e: { client_ref?: string }) {
+      const clientRef = e.client_ref;
+      if (clientRef) {
+        setTransfers((prev) => prev.filter((t) => t.key !== clientRef));
+        const idx = outgoingQueue.current.findIndex((o) => o.key === clientRef);
+        if (idx !== -1) {
+          const { key } = outgoingQueue.current.splice(idx, 1)[0];
+          filesRef.current.delete(key);
+        }
+      }
+    }
 
     function makeSenderCallbacks(transfer_id: string): PeerCallbacks {
       return {

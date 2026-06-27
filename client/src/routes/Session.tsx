@@ -1352,29 +1352,31 @@ export function Session() {
         showClose
       >
         <ul className="session_transfer_list">
-          {otherMembers.map((m) => (
-            <li key={m.user_id}>
-              <button
-                type="button"
-                className="session_transfer_pick"
-                onClick={() => {
-                  s.makeOwner(m.user_id);
-                  setOwnerTransferPick(false);
-                  toast(
-                    `Ownership offer sent to ${m.display_name}. They’ll take over once they accept.`,
-                    "info"
-                  );
-                }}
-              >
-                <span className="session_transfer_pick_name">
-                  {m.display_name}
-                </span>
-                <span className="session_transfer_pick_id">
-                  #{shortId(m.user_id)}
-                </span>
-              </button>
-            </li>
-          ))}
+          {otherMembers
+            .filter((m) => !m.blocked)
+            .map((m) => (
+              <li key={m.user_id}>
+                <button
+                  type="button"
+                  className="session_transfer_pick"
+                  onClick={() => {
+                    s.makeOwner(m.user_id);
+                    setOwnerTransferPick(false);
+                    toast(
+                      `Ownership offer sent to ${m.display_name}. They’ll take over once they accept.`,
+                      "info"
+                    );
+                  }}
+                >
+                  <span className="session_transfer_pick_name">
+                    {m.display_name}
+                  </span>
+                  <span className="session_transfer_pick_id">
+                    #{shortId(m.user_id)}
+                  </span>
+                </button>
+              </li>
+            ))}
         </ul>
       </Modal>
     </Page>

@@ -95,9 +95,12 @@
 .activity_row_delete .activity_row_icon,
 .activity_row_kick .activity_row_icon,
 .activity_row_block .activity_row_icon,
-.activity_row_report .activity_row_icon,
-.activity_row_restrict .activity_row_icon {
+.activity_row_report .activity_row_icon {
   color: var(--danger);
+}
+
+.activity_row_restrict .activity_row_icon {
+  color: var(--warn);
 }
 
 .activity_row_join .activity_row_icon,

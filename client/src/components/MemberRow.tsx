@@ -1,4 +1,9 @@
-import { RiMore2Fill, RiSendPlane2Line } from "react-icons/ri";
+import {
+  RiMore2Fill,
+  RiSendPlane2Line,
+  RiForbidLine,
+  RiCloseCircleLine,
+} from "react-icons/ri";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "./ui/Badge";
@@ -99,6 +104,10 @@ export function MemberRow({
     };
   }, [menuOpen]);
 
+  // Count moderation badges to determine responsive display
+  const moderationBadgeCount =
+    (member.blocked ? 1 : 0) + (!isYou && restricted ? 1 : 0);
+
   return (
     <li className="member_row">
       <PresenceDot online={member.online} />
@@ -106,11 +115,32 @@ export function MemberRow({
         <span className="member_row_name">{member.display_name}</span>
         <span className="member_row_tag">({shortId(member.user_id)})</span>
       </div>
-      <div className="member_row_badges">
+      <div
+        className="member_row_badges"
+        data-badge-count={moderationBadgeCount}
+      >
         {isYou && <Badge variant="accent">you</Badge>}
         {member.is_owner && <Badge variant="success">owner</Badge>}
-        {member.blocked && <Badge variant="danger">blocked</Badge>}
-        {!isYou && restricted && <Badge variant="warn">restricted</Badge>}
+        {member.blocked && (
+          <Tooltip label="Blocked" placement="top">
+            <div className="member_row_badge_item">
+              <Badge variant="danger">blocked</Badge>
+              <div className="member_row_badge_icon">
+                <RiForbidLine size={16} />
+              </div>
+            </div>
+          </Tooltip>
+        )}
+        {!isYou && restricted && (
+          <Tooltip label="Restricted" placement="top">
+            <div className="member_row_badge_item">
+              <Badge variant="warn">restricted</Badge>
+              <div className="member_row_badge_icon">
+                <RiCloseCircleLine size={16} />
+              </div>
+            </div>
+          </Tooltip>
+        )}
       </div>
       {!isYou && (
         <div className="member_row_actions">
@@ -191,7 +221,7 @@ export function MemberRow({
                         <button
                           className="member_row_menu_item"
                           role="menuitem"
-                          disabled={frozen}
+                          disabled={frozen || member.blocked}
                           onClick={() => {
                             setMenuOpen(false);
                             onMakeOwner(member);

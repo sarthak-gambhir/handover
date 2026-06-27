@@ -120,6 +120,10 @@ function recordTransferActivity(
   transfer: TransferState,
   outcome: ActivityOutcome
 ): void {
+  // Don't record activity for transfers initiated by blocked members
+  if (session.blocked_user_ids.has(transfer.from_user_id)) {
+    return;
+  }
   const from = memberByUserId(session, transfer.from_user_id);
   const to = memberByUserId(session, transfer.to_user_id);
   const entry = store.recordActivity(session, {
@@ -958,6 +962,13 @@ function handleOwnershipOffer(
     });
     return;
   }
+  if (ctx.session.blocked_user_ids.has(p.to_user_id)) {
+    socket.emit("error", {
+      code: "blocked_user",
+      message: "cannot transfer ownership to a blocked member",
+    });
+    return;
+  }
   // Record the offer so only this target can later accept it (and only before
   // it expires). Overwrites any prior outstanding offer from this owner.
   ctx.session.pending_owner_offer = {
@@ -1052,6 +1063,7 @@ function handleTransferRequest(
     socket.emit("error", {
       code: "invalid_target",
       message: "cannot send to yourself",
+      client_ref: clientRef,
     });
     return;
   }
@@ -1060,6 +1072,7 @@ function handleTransferRequest(
     socket.emit("error", {
       code: "recipient_unavailable",
       message: "recipient offline",
+      client_ref: clientRef,
     });
     return;
   }
@@ -1069,6 +1082,7 @@ function handleTransferRequest(
     socket.emit("error", {
       code: "sender_blocked",
       message: "The owner has blocked you from sending files.",
+      client_ref: clientRef,
     });
     return;
   }
@@ -1076,6 +1090,7 @@ function handleTransferRequest(
     socket.emit("error", {
       code: "sender_restricted",
       message: "This member isn't accepting files from you.",
+      client_ref: clientRef,
     });
     return;
   }
@@ -1084,18 +1099,24 @@ function handleTransferRequest(
     socket.emit("error", {
       code: "read_only",
       message: "Only the owner can send files in this session.",
+      client_ref: clientRef,
     });
     return;
   }
   const files = Array.isArray(p.files) ? p.files : [];
   if (files.length === 0 || files.length > MAX_TRANSFER_FILES) {
-    socket.emit("error", { code: "invalid_files", message: "bad file batch" });
+    socket.emit("error", {
+      code: "invalid_files",
+      message: "bad file batch",
+      client_ref: clientRef,
+    });
     return;
   }
   if (!allowTransferRequest(user_id)) {
     socket.emit("error", {
       code: "rate_limited",
       message: "too many requests",
+      client_ref: clientRef,
     });
     return;
   }

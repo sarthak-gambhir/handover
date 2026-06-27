@@ -39,6 +39,54 @@
   gap: var(--space_1);
 }
 
+.member_row_badge_item {
+  display: flex;
+  align-items: center;
+
+  .member_row_badge_icon {
+    display: none;
+  }
+
+  // On medium+ screens with multiple badges, show icon only with badge-like styling
+  @include m.md_up {
+    .member_row_badges[data-badge-count="2"] & {
+      // Hide the badge text
+      :is(.badge) {
+        display: none;
+      }
+
+      // Show the icon with badge styling
+      .member_row_badge_icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        border-radius: var(--radius_sm);
+      }
+    }
+  }
+}
+
+// Color variants for icons matching badge variants
+.member_row_badge_item:has(.badge_danger) .member_row_badge_icon {
+  @include m.md_up {
+    .member_row_badges[data-badge-count="2"] & {
+      background: color-mix(in srgb, var(--danger) 14%, transparent);
+      color: var(--danger);
+    }
+  }
+}
+
+.member_row_badge_item:has(.badge_warn) .member_row_badge_icon {
+  @include m.md_up {
+    .member_row_badges[data-badge-count="2"] & {
+      background: color-mix(in srgb, var(--warn) 14%, transparent);
+      color: var(--warn);
+    }
+  }
+}
+
 .member_row_actions {
   display: flex;
   align-items: center;
