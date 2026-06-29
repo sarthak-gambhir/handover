@@ -106,7 +106,7 @@
     width: 100%;
   }
 
-  @include m.sm_up {
+  @include m.md_up {
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;

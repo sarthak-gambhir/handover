@@ -223,6 +223,14 @@
 // Same idea for a disabled button inside a flex footer row.
 .session_leave_tip {
   display: inline-flex;
+
+  @include m.md_down {
+    flex: 1;
+
+    & > button {
+      flex: 1;
+    }
+  }
 }
 
 .session_menu_item {
